@@ -150,13 +150,6 @@
         color: var(--muted);
       }
 
-      .actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-      }
-
       .status {
         display: flex;
         align-items: center;
@@ -205,19 +198,18 @@
       }
 
       .row-action-btn {
-        border: 1px solid var(--line);
-        background: #fff;
+        border: 0;
+        background: transparent;
         color: #23466d;
-        border-radius: 8px;
-        padding: 4px 8px;
+        border-radius: 0;
+        padding: 0;
         font-size: 12px;
         font-weight: 700;
         cursor: pointer;
       }
 
       .row-action-btn:hover {
-        border-color: #b5c5d8;
-        background: #f6f9fc;
+        text-decoration: underline;
       }
 
       .row-action-btn:focus-visible {
@@ -264,6 +256,9 @@
         position: sticky;
         top: var(--sticky-head-h);
         z-index: 1;
+        height: 56px;
+        box-sizing: border-box;
+        vertical-align: middle;
       }
 
       th.sortable {
@@ -315,19 +310,29 @@
 
       th.actions,
       td.actions {
-        width: 120px;
-        min-width: 120px;
-        max-width: 120px;
+        width: 116px;
+        min-width: 116px;
+        max-width: 116px;
         white-space: nowrap;
-        overflow: visible;
-        text-overflow: clip;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        border-left: 1px solid #edf2f7;
       }
 
       th.actions {
         position: sticky;
         top: var(--sticky-head-h);
-        z-index: 2;
+        z-index: 1;
         background: #eef4fb;
+      }
+
+      td.actions {
+        vertical-align: top;
+      }
+
+      td.actions .row-action-btn {
+        margin: 0;
+        display: inline-flex;
       }
 
       th.name,
