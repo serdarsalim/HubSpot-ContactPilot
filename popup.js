@@ -5,7 +5,6 @@ const stickyHeadEl = document.getElementById("stickyHead");
 const listEl = document.getElementById("list");
 
 const settingsBtn = document.getElementById("settingsBtn");
-const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const cancelSettingsBtn = document.getElementById("cancelSettingsBtn");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 const settingsOverlay = document.getElementById("settingsOverlay");
@@ -46,6 +45,7 @@ let displayedContacts = [];
 let phoneColumnId = null;
 let selectedKeys = new Set();
 let sortState = { field: null, direction: "asc" };
+let currentPortalId = "";
 let notesDialogState = {
   recordId: "",
   contactName: "",
@@ -240,6 +240,14 @@ function renderContacts() {
 
           if (col.id === phoneColumnId && contact.waUrl) {
             return `<td class='${css}'><a href='${escapeHtml(contact.waUrl)}' target='_blank' rel='noopener noreferrer'>${escapeHtml(value)}</a></td>`;
+          }
+
+          if (columnType(col) === "name") {
+            const recordId = getRecordIdForContact(contact);
+            const contactUrl = buildContactUrl(recordId, currentPortalId);
+            if (contactUrl) {
+              return `<td class='${css}'><a href='${escapeHtml(contactUrl)}' target='_blank' rel='noopener noreferrer'>${escapeHtml(value)}</a></td>`;
+            }
           }
 
           return `<td class='${css}'>${escapeHtml(value)}</td>`;
@@ -567,6 +575,13 @@ function getRecordIdForContact(contact) {
   return String(contact?.values?.[recordIdColumn.id] || "").replace(/\D/g, "");
 }
 
+function buildContactUrl(recordId, portalId) {
+  const cleanRecordId = String(recordId || "").replace(/\D/g, "");
+  const cleanPortalId = String(portalId || "").replace(/\D/g, "");
+  if (!cleanRecordId || !cleanPortalId) return "";
+  return `https://app.hubspot.com/contacts/${cleanPortalId}/record/0-1/${cleanRecordId}`;
+}
+
 function getSelectedRecordIds() {
   const contacts = getSelectedContacts();
   return [...new Set(contacts.map((c) => getRecordIdForContact(c)).filter(Boolean))];
@@ -871,6 +886,7 @@ async function loadContacts(options = {}) {
     currentColumns = response.columns || [];
     currentContacts = response.contacts || [];
     phoneColumnId = response.phoneColumnId || null;
+    currentPortalId = (await getPortalId(tab)) || "";
 
     mergeColumnSettings();
     await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
@@ -887,7 +903,6 @@ async function loadContacts(options = {}) {
 }
 
 settingsBtn.addEventListener("click", openSettings);
-closeSettingsBtn.addEventListener("click", closeSettings);
 cancelSettingsBtn.addEventListener("click", closeSettings);
 saveSettingsBtn.addEventListener("click", saveSettings);
 settingsOverlay.addEventListener("click", (event) => {

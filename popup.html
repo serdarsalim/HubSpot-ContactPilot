@@ -347,6 +347,22 @@
         font-weight: 600;
       }
 
+      td.name a {
+        color: inherit;
+        text-decoration: none;
+        font-weight: inherit;
+      }
+
+      td.name a:hover {
+        text-decoration: underline;
+      }
+
+      td.name a:focus-visible {
+        outline: 2px solid #0b66c3;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
       th.email,
       td.email {
         max-width: 220px;
@@ -587,7 +603,6 @@
       <div class="settings-card">
         <div class="settings-head">
           <h2>Settings</h2>
-          <button id="closeSettingsBtn" class="icon-btn">Close</button>
         </div>
 
         <div class="field">
