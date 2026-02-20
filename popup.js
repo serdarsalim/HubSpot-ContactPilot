@@ -1,4 +1,6 @@
 const statusEl = document.getElementById("status");
+const statusTextEl = document.getElementById("statusText");
+const statusActionsEl = document.getElementById("statusActions");
 const listEl = document.getElementById("list");
 
 const settingsBtn = document.getElementById("settingsBtn");
@@ -11,7 +13,6 @@ const columnChecks = document.getElementById("columnChecks");
 const refreshBtn = document.getElementById("refreshBtn");
 const csvSelectedBtn = document.getElementById("csvSelectedBtn");
 const vcfSelectedBtn = document.getElementById("vcfSelectedBtn");
-const exportActionsEl = document.getElementById("exportActions");
 
 const countryPrefixInput = document.getElementById("countryPrefixInput");
 
@@ -65,6 +66,14 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function setStatus(message) {
+  if (statusTextEl) {
+    statusTextEl.textContent = message;
+    return;
+  }
+  statusEl.textContent = message;
 }
 
 function contactKey(contact) {
@@ -133,19 +142,19 @@ function renderContacts() {
   updateExportActionsVisibility();
 
   if (!currentContacts.length) {
-    statusEl.textContent = "No contacts with phone numbers found on this view.";
+    setStatus("No contacts with phone numbers found on this view.");
     return;
   }
 
   const visibleColumns = getVisibleColumns();
   if (!visibleColumns.length) {
-    statusEl.textContent = `Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`;
+    setStatus(`Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`);
     listEl.innerHTML = "<div class='status'>Enable at least one column in Settings.</div>";
     return;
   }
 
   displayedContacts = getSortedContacts(currentContacts);
-  statusEl.textContent = `Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`;
+  setStatus(`Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`);
 
   const allShownSelected = displayedContacts.length > 0 && displayedContacts.every((c) => selectedKeys.has(contactKey(c)));
 
@@ -215,7 +224,7 @@ function renderContacts() {
       if (input.checked) selectedKeys.add(key);
       else selectedKeys.delete(key);
       updateExportActionsVisibility();
-      statusEl.textContent = `Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`;
+      setStatus(`Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`);
     });
   });
 
@@ -277,7 +286,7 @@ async function saveSettings() {
   const next = settingsFromForm();
   const hasVisible = Object.values(next.visibleColumns).some(Boolean);
   if (!hasVisible) {
-    statusEl.textContent = "Enable at least one column.";
+    setStatus("Enable at least one column.");
     return;
   }
 
@@ -305,9 +314,7 @@ function getSelectedContacts() {
 
 function updateExportActionsVisibility() {
   const hasSelection = getSelectedContacts().length > 0;
-  if (exportActionsEl) exportActionsEl.hidden = !hasSelection;
-  if (csvSelectedBtn) csvSelectedBtn.hidden = !hasSelection;
-  if (vcfSelectedBtn) vcfSelectedBtn.hidden = !hasSelection;
+  if (statusActionsEl) statusActionsEl.hidden = !hasSelection;
 }
 
 function buildCsvRows(contacts) {
@@ -353,7 +360,7 @@ function toVcf(contacts) {
 function exportCsvSelected() {
   const contacts = getSelectedContacts();
   if (!contacts.length) {
-    statusEl.textContent = "No selected contacts to export.";
+    setStatus("No selected contacts to export.");
     return;
   }
 
@@ -364,7 +371,7 @@ function exportCsvSelected() {
 function exportVcfSelected() {
   const contacts = getSelectedContacts();
   if (!contacts.length) {
-    statusEl.textContent = "No selected contacts to export.";
+    setStatus("No selected contacts to export.");
     return;
   }
 
@@ -378,7 +385,7 @@ async function loadContacts() {
     const tab = tabs[0];
 
     if (!tab || typeof tab.id !== "number") {
-      statusEl.textContent = "No active tab found.";
+      setStatus("No active tab found.");
       return;
     }
 
@@ -388,7 +395,7 @@ async function loadContacts() {
     });
 
     if (!response || !response.ok) {
-      statusEl.textContent = "Open a HubSpot tab (app.hubspot.com), refresh it, and try again.";
+      setStatus("Open a HubSpot tab (app.hubspot.com), refresh it, and try again.");
       return;
     }
 
@@ -403,7 +410,7 @@ async function loadContacts() {
     sortState = { field: null, direction: "asc" };
     renderContacts();
   } catch (_error) {
-    statusEl.textContent = "Could not load contacts. Refresh HubSpot tab and retry.";
+    setStatus("Could not load contacts. Refresh HubSpot tab and retry.");
   }
 }
 

@@ -143,11 +143,50 @@
       }
 
       .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
         font-size: 13px;
         padding: 8px 10px;
         background: var(--brand-soft);
         border-radius: 10px;
         margin-bottom: 10px;
+      }
+
+      .status-text {
+        margin: 0;
+      }
+
+      .status-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .status-actions[hidden] {
+        display: none;
+      }
+
+      .status-action {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        font-weight: 700;
+        color: #1f2d3d;
+        cursor: pointer;
+      }
+
+      .status-action:hover {
+        text-decoration: underline;
+      }
+
+      .status-action:focus-visible {
+        outline: 2px solid #0b66c3;
+        outline-offset: 2px;
+        border-radius: 4px;
       }
 
       .list {
@@ -160,7 +199,7 @@
       table {
         width: 100%;
         border-collapse: collapse;
-        table-layout: fixed;
+        table-layout: auto;
       }
 
       th,
@@ -170,13 +209,14 @@
         border-bottom: 1px solid #edf2f7;
         font-size: 13px;
         vertical-align: top;
+        overflow-wrap: anywhere;
       }
 
       th.plain,
       td.plain {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
       }
 
       th {
@@ -210,9 +250,8 @@
 
       th.name,
       td.name {
-        width: 180px;
         max-width: 180px;
-        white-space: nowrap;
+        white-space: normal;
         overflow: hidden;
         text-overflow: ellipsis;
       }
@@ -223,9 +262,8 @@
 
       th.email,
       td.email {
-        width: 220px;
         max-width: 220px;
-        white-space: nowrap;
+        white-space: normal;
         overflow: hidden;
         text-overflow: ellipsis;
       }
@@ -236,7 +274,6 @@
 
       th.phone,
       td.phone {
-        width: 170px;
         max-width: 170px;
         white-space: nowrap;
       }
@@ -259,9 +296,8 @@
 
       th.possibility,
       td.possibility {
-        width: 120px;
         max-width: 120px;
-        white-space: nowrap;
+        white-space: normal;
         overflow: hidden;
         text-overflow: ellipsis;
       }
@@ -365,12 +401,13 @@
       </div>
     </div>
 
-    <div id="exportActions" class="actions" hidden>
-      <button id="csvSelectedBtn" class="btn" hidden>CSV Selected</button>
-      <button id="vcfSelectedBtn" class="btn" hidden>VCF Selected</button>
+    <div id="status" class="status">
+      <span id="statusText" class="status-text">Loading contacts...</span>
+      <span id="statusActions" class="status-actions" hidden>
+        <button id="csvSelectedBtn" class="status-action" type="button">CSV Selected</button>
+        <button id="vcfSelectedBtn" class="status-action" type="button">VCF Selected</button>
+      </span>
     </div>
-
-    <div id="status" class="status">Loading contacts...</div>
     <div id="list" class="list"></div>
 
     <div id="settingsOverlay" class="settings-overlay">
