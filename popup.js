@@ -53,6 +53,7 @@ let notesDialogState = {
   loading: false
 };
 let notesLoadToken = 0;
+let contactsLoading = false;
 
 function columnType(col) {
   if (col.id === phoneColumnId) return "phone";
@@ -106,6 +107,10 @@ function updateStickyHeadOffset() {
   if (!stickyHeadEl || !document?.documentElement?.style) return;
   const stickyHeight = Math.ceil(stickyHeadEl.getBoundingClientRect().height);
   document.documentElement.style.setProperty("--sticky-head-h", `${stickyHeight + 6}px`);
+}
+
+function setContactsLoadingState(isLoading) {
+  if (refreshBtn) refreshBtn.disabled = !!isLoading;
 }
 
 function contactKey(contact) {
@@ -834,18 +839,28 @@ async function logWhatsappNoteSelected() {
   }
 }
 
-async function loadContacts() {
+async function loadContacts(options = {}) {
+  if (contactsLoading) return;
+  contactsLoading = true;
+  setContactsLoadingState(true);
+
   try {
+    const loadAll = !!options.loadAll;
     const tab = await findHubSpotTab();
     if (!tab || typeof tab.id !== "number") {
       setStatus("Open a HubSpot tab (app.hubspot.com), refresh it, and try again.");
       return;
     }
 
+    if (loadAll) {
+      setStatus("Loading all visible contacts from HubSpot table...");
+    }
+
     const response = await chrome.tabs.sendMessage(tab.id, {
       type: "GET_CONTACTS",
       countryPrefix: settings.countryPrefix,
-      messageText: settings.messageTemplate
+      messageText: settings.messageTemplate,
+      loadAll
     });
 
     if (!response || !response.ok) {
@@ -865,6 +880,9 @@ async function loadContacts() {
     renderContacts();
   } catch (_error) {
     setStatus("Could not load contacts. Refresh HubSpot tab and retry.");
+  } finally {
+    contactsLoading = false;
+    setContactsLoadingState(false);
   }
 }
 
@@ -889,7 +907,9 @@ if (saveNoteBtn) {
   });
 }
 
-refreshBtn.addEventListener("click", loadContacts);
+refreshBtn.addEventListener("click", () => {
+  void loadContacts({ loadAll: true });
+});
 csvSelectedBtn.addEventListener("click", exportCsvSelected);
 vcfSelectedBtn.addEventListener("click", exportVcfSelected);
 copyEmailBtn.addEventListener("click", () => {
@@ -901,7 +921,7 @@ logWhatsappBtn.addEventListener("click", () => {
 
 async function init() {
   await loadSettings();
-  await loadContacts();
+  await loadContacts({ loadAll: true });
   updateStickyHeadOffset();
 }
 

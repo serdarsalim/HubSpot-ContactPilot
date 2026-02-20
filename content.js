@@ -139,6 +139,171 @@
     return String(template || "").replace(/\[name\]/gi, firstName);
   }
 
+  function extractValuesFromRow(row, columns) {
+    const cells = Array.from(row.querySelectorAll("td, [role='gridcell']"));
+    if (!cells.length) return null;
+
+    const values = {};
+    for (const col of columns) {
+      const cell = cells[col.sourceIndex] || null;
+      let value = cleanText(cell?.innerText || cell?.textContent || "");
+
+      if (!value) {
+        values[col.id] = "";
+        continue;
+      }
+
+      if (/name/i.test(col.label) || /^name(_\d+)?$/i.test(col.id)) {
+        value = sanitizeNameValue(value);
+      }
+
+      values[col.id] = value;
+    }
+
+    return values;
+  }
+
+  function buildContactFromValues(values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText) {
+    if (!values) return null;
+    const hasAny = Object.values(values).some(Boolean);
+    if (!hasAny) return null;
+
+    let phoneRaw = "";
+    if (phoneColumnId) {
+      phoneRaw = cleanPhoneCandidate(values[phoneColumnId] || "");
+    }
+
+    if (!phoneRaw) {
+      const firstPhoneCell = Object.values(values).find((v) => PHONE_PATTERN.test(v));
+      phoneRaw = cleanPhoneCandidate(firstPhoneCell || "");
+    }
+
+    const phoneDigits = phoneRaw ? normalizePhone(phoneRaw, countryPrefix) || "" : "";
+    const baseWaUrl = phoneDigits ? `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number` : "";
+    const text = cleanText(applyMessageTemplate(messageText, values, nameColumnId));
+    const waUrl = baseWaUrl ? (text ? `${baseWaUrl}&text=${encodeURIComponent(text)}` : baseWaUrl) : "";
+    const key = columns.map((c) => values[c.id] || "").join("|");
+
+    return {
+      key,
+      values,
+      phoneDisplay: phoneRaw || values[phoneColumnId || ""] || "",
+      phoneDigits,
+      waUrl
+    };
+  }
+
+  function collectContactsFromRows(rows, columns, phoneColumnId, nameColumnId, countryPrefix, messageText, seenKeys, contacts) {
+    for (const row of rows) {
+      const values = extractValuesFromRow(row, columns);
+      const contact = buildContactFromValues(values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText);
+      if (!contact) continue;
+      if (seenKeys.has(contact.key)) continue;
+      seenKeys.add(contact.key);
+      contacts.push(contact);
+    }
+  }
+
+  function isScrollableElement(element) {
+    if (!(element instanceof Element)) return false;
+    const style = window.getComputedStyle(element);
+    const overflowY = String(style.overflowY || "").toLowerCase();
+    const canScroll = overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
+    if (!canScroll) return false;
+    return element.scrollHeight - element.clientHeight > 60;
+  }
+
+  function findTableScrollContainer(headerInfo) {
+    const seeds = [
+      headerInfo?.row?.closest("table"),
+      headerInfo?.row?.closest("[role='grid']"),
+      headerInfo?.row
+    ].filter(Boolean);
+
+    for (const seed of seeds) {
+      let node = seed;
+      while (node && node !== document.body) {
+        if (isScrollableElement(node)) return node;
+        node = node.parentElement;
+      }
+    }
+
+    const fallback = document.scrollingElement || document.documentElement;
+    return fallback || null;
+  }
+
+  async function extractTableContactsWithAutoScroll(countryPrefix = DEFAULT_COUNTRY_CODE, messageText = "") {
+    const headerInfo = findHeaderRow();
+    if (!headerInfo) {
+      return { columns: [], contacts: [], phoneColumnId: null };
+    }
+
+    const columns = buildColumns(headerInfo);
+    if (!columns.length) {
+      return { columns: [], contacts: [], phoneColumnId: null };
+    }
+
+    const phoneColumnId = findPhoneColumnId(columns);
+    const nameColumnId = findNameColumnId(columns);
+    const contacts = [];
+    const seen = new Set();
+    const collectSnapshot = () => {
+      const rows = getDataRows(headerInfo);
+      collectContactsFromRows(rows, columns, phoneColumnId, nameColumnId, countryPrefix, messageText, seen, contacts);
+    };
+
+    collectSnapshot();
+
+    const scroller = findTableScrollContainer(headerInfo);
+    if (!scroller) return { columns, contacts, phoneColumnId };
+
+    const startTop = scroller.scrollTop;
+
+    try {
+      scroller.scrollTop = 0;
+      await sleep(240);
+      collectSnapshot();
+
+      let stableBottomRounds = 0;
+      let previousHeight = scroller.scrollHeight;
+      let previousCount = contacts.length;
+
+      for (let i = 0; i < 180; i += 1) {
+        const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const step = Math.max(220, Math.floor(scroller.clientHeight * 0.85));
+        const nextTop = Math.min(maxTop, scroller.scrollTop + step);
+        scroller.scrollTop = nextTop;
+
+        await sleep(240);
+        collectSnapshot();
+
+        const newMaxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const atBottom = scroller.scrollTop >= newMaxTop - 2;
+        const heightChanged = Math.abs(scroller.scrollHeight - previousHeight) > 1;
+        const countChanged = contacts.length !== previousCount;
+
+        if (atBottom && !heightChanged && !countChanged) {
+          stableBottomRounds += 1;
+        } else {
+          stableBottomRounds = 0;
+        }
+
+        previousHeight = scroller.scrollHeight;
+        previousCount = contacts.length;
+
+        if (stableBottomRounds >= 6) break;
+      }
+
+      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      await sleep(240);
+      collectSnapshot();
+    } finally {
+      scroller.scrollTop = startTop;
+    }
+
+    return { columns, contacts, phoneColumnId };
+  }
+
   function extractTableContacts(countryPrefix = DEFAULT_COUNTRY_CODE, messageText = "") {
     const headerInfo = findHeaderRow();
     if (!headerInfo) {
@@ -150,64 +315,13 @@
       return { columns: [], contacts: [], phoneColumnId: null };
     }
 
-    const rows = getDataRows(headerInfo);
     const phoneColumnId = findPhoneColumnId(columns);
     const nameColumnId = findNameColumnId(columns);
 
     const contacts = [];
     const seen = new Set();
-
-    for (const row of rows) {
-      const cells = Array.from(row.querySelectorAll("td, [role='gridcell']"));
-      if (!cells.length) continue;
-
-      const values = {};
-      for (const col of columns) {
-        const cell = cells[col.sourceIndex] || null;
-        let value = cleanText(cell?.innerText || cell?.textContent || "");
-
-        if (!value) {
-          values[col.id] = "";
-          continue;
-        }
-
-        if (/name/i.test(col.label) || /^name(_\d+)?$/i.test(col.id)) {
-          value = sanitizeNameValue(value);
-        }
-
-        values[col.id] = value;
-      }
-
-      const hasAny = Object.values(values).some(Boolean);
-      if (!hasAny) continue;
-
-      let phoneRaw = "";
-      if (phoneColumnId) {
-        phoneRaw = cleanPhoneCandidate(values[phoneColumnId] || "");
-      }
-
-      if (!phoneRaw) {
-        const firstPhoneCell = Object.values(values).find((v) => PHONE_PATTERN.test(v));
-        phoneRaw = cleanPhoneCandidate(firstPhoneCell || "");
-      }
-
-      const phoneDigits = phoneRaw ? normalizePhone(phoneRaw, countryPrefix) || "" : "";
-      const baseWaUrl = phoneDigits ? `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number` : "";
-      const text = cleanText(applyMessageTemplate(messageText, values, nameColumnId));
-      const waUrl = baseWaUrl ? (text ? `${baseWaUrl}&text=${encodeURIComponent(text)}` : baseWaUrl) : "";
-
-      const key = columns.map((c) => values[c.id] || "").join("|");
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      contacts.push({
-        key,
-        values,
-        phoneDisplay: phoneRaw || values[phoneColumnId || ""] || "",
-        phoneDigits,
-        waUrl
-      });
-    }
+    const rows = getDataRows(headerInfo);
+    collectContactsFromRows(rows, columns, phoneColumnId, nameColumnId, countryPrefix, messageText, seen, contacts);
 
     return { columns, contacts, phoneColumnId };
   }
@@ -452,15 +566,15 @@
     if (!message || !message.type) return;
 
     if (message.type === "GET_CONTACTS") {
-      try {
-        const countryPrefix = String(message.countryPrefix || DEFAULT_COUNTRY_CODE);
-        const messageText = String(message.messageText || "");
-        const payload = extractTableContacts(countryPrefix, messageText);
-        sendResponse({ ok: true, ...payload });
-      } catch (error) {
-        sendResponse({ ok: false, error: String(error) });
-      }
-      return;
+      const countryPrefix = String(message.countryPrefix || DEFAULT_COUNTRY_CODE);
+      const messageText = String(message.messageText || "");
+      const loadAll = !!message.loadAll;
+
+      const run = loadAll ? extractTableContactsWithAutoScroll(countryPrefix, messageText) : Promise.resolve(extractTableContacts(countryPrefix, messageText));
+      run
+        .then((payload) => sendResponse({ ok: true, ...payload }))
+        .catch((error) => sendResponse({ ok: false, error: String(error) }));
+      return true;
     }
 
     if (message.type === "GET_PORTAL_ID") {

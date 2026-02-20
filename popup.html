@@ -103,6 +103,12 @@
         transform: translateY(-1px);
       }
 
+      .title-icon-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+        transform: none;
+      }
+
       .title-icon-btn:focus-visible {
         outline: 2px solid #0b66c3;
         outline-offset: 2px;
@@ -315,6 +321,13 @@
         white-space: nowrap;
         overflow: visible;
         text-overflow: clip;
+      }
+
+      th.actions {
+        position: sticky;
+        top: var(--sticky-head-h);
+        z-index: 2;
+        background: #eef4fb;
       }
 
       th.name,
@@ -584,7 +597,7 @@
 
         <div class="field">
           <label for="noteTemplateInput">Default note for Actions > Notes</label>
-          <textarea id="noteTemplateInput" placeholder="Reached out on WhatsApp"></textarea>
+          <textarea id="noteTemplateInput"></textarea>
         </div>
 
         <div class="field">
@@ -608,7 +621,6 @@
       <div class="notes-card">
         <div class="notes-head">
           <h2 id="notesTitle">Notes</h2>
-          <button id="closeNotesBtn" class="icon-btn">Close</button>
         </div>
 
         <div id="notesList" class="notes-list">
@@ -617,11 +629,11 @@
 
         <div class="field">
           <label for="notesTextInput">Add note</label>
-          <textarea id="notesTextInput" placeholder="Reached out on WhatsApp"></textarea>
+          <textarea id="notesTextInput"></textarea>
         </div>
 
         <div class="settings-actions">
-          <button id="cancelNotesBtn" class="btn">Cancel</button>
+          <button id="cancelNotesBtn" class="btn">Close</button>
           <button id="saveNoteBtn" class="btn primary">Save Note</button>
         </div>
       </div>
