@@ -198,6 +198,27 @@
         border-radius: 4px;
       }
 
+      .row-action-btn {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #23466d;
+        border-radius: 8px;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .row-action-btn:hover {
+        border-color: #b5c5d8;
+        background: #f6f9fc;
+      }
+
+      .row-action-btn:focus-visible {
+        outline: 2px solid #0b66c3;
+        outline-offset: 2px;
+      }
+
       .list {
         overflow: visible;
         background: var(--card);
@@ -284,6 +305,16 @@
       td.col-fluid {
         width: auto;
         max-width: none;
+      }
+
+      th.actions,
+      td.actions {
+        width: 120px;
+        min-width: 120px;
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: visible;
+        text-overflow: clip;
       }
 
       th.name,
@@ -479,6 +510,11 @@
         <div class="field">
           <label for="messageTemplateInput">Default WhatsApp message (prefilled, use [name] for first name)</label>
           <textarea id="messageTemplateInput" placeholder="Hi, I am reaching out regarding..."></textarea>
+        </div>
+
+        <div class="field">
+          <label for="noteTemplateInput">Default note for Actions > Add Note</label>
+          <textarea id="noteTemplateInput" placeholder="Reached out on WhatsApp"></textarea>
         </div>
 
         <div class="field">

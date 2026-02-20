@@ -212,59 +212,149 @@
     return { columns, contacts, phoneColumnId };
   }
 
-  async function createContactNote(recordId, noteBody) {
-    const numericId = Number(String(recordId || "").replace(/\D/g, ""));
-    if (!Number.isFinite(numericId) || numericId <= 0) {
-      throw new Error("Invalid Record ID");
-    }
-
-    const payload = {
-      engagement: {
-        active: true,
-        type: "NOTE",
-        timestamp: Date.now()
-      },
-      associations: {
-        contactIds: [numericId],
-        companyIds: [],
-        dealIds: [],
-        ownerIds: []
-      },
-      metadata: {
-        body: String(noteBody || "").trim() || "Reached out on WhatsApp"
-      }
-    };
-
-    const response = await fetch("/engagements/v1/engagements", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(`HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`);
-    }
+  function getPortalIdFromPath() {
+    const match = String(location.pathname || "").match(/\/contacts\/(\d+)\//i);
+    return match ? match[1] : "";
   }
 
-  async function logWhatsappNotes(recordIds, noteBody) {
-    const uniqueIds = [...new Set((Array.isArray(recordIds) ? recordIds : []).map((id) => String(id || "").replace(/\D/g, "")).filter(Boolean))];
-    const failed = [];
-    let created = 0;
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
-    for (const recordId of uniqueIds) {
-      try {
-        await createContactNote(recordId, noteBody);
-        created += 1;
-      } catch (error) {
-        failed.push({ recordId, error: String(error) });
+  function isVisible(element) {
+    if (!element) return false;
+    const style = window.getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function elementText(element) {
+    return cleanText(element?.innerText || element?.textContent || element?.getAttribute?.("aria-label") || "");
+  }
+
+  function findNoteEditor() {
+    const candidates = Array.from(document.querySelectorAll("textarea, [contenteditable='true'], [role='textbox']")).filter((el) => {
+      if (!isVisible(el)) return false;
+      const hint = cleanText(
+        el.getAttribute("placeholder") || el.getAttribute("aria-label") || el.getAttribute("data-selenium-test") || ""
+      ).toLowerCase();
+      if (hint.includes("search")) return false;
+      return true;
+    });
+
+    if (!candidates.length) return null;
+
+    const scored = candidates
+      .map((el) => {
+        const hint = cleanText(
+          el.getAttribute("placeholder") || el.getAttribute("aria-label") || el.getAttribute("data-selenium-test") || ""
+        ).toLowerCase();
+        let score = 0;
+        if (hint.includes("note")) score += 6;
+        if (hint.includes("body")) score += 3;
+        if (hint.includes("activity")) score += 2;
+        if (el.closest("[role='dialog']")) score += 2;
+        if (el.tagName === "TEXTAREA") score += 2;
+        return { el, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    return scored[0].el || null;
+  }
+
+  function clickNoteTrigger() {
+    const triggers = Array.from(document.querySelectorAll("button, [role='button']")).filter((el) => {
+      if (!isVisible(el)) return false;
+      const text = elementText(el).toLowerCase();
+      if (!text) return false;
+      if (text.includes("cancel") || text.includes("close")) return false;
+      return text === "note" || text.includes("add note") || text.includes("create note");
+    });
+
+    if (!triggers.length) return false;
+    triggers[0].click();
+    return true;
+  }
+
+  function setEditorText(editor, noteBody) {
+    const text = String(noteBody || "").trim();
+    if (!text) return;
+
+    editor.focus();
+
+    if (editor.tagName === "TEXTAREA" || editor.tagName === "INPUT") {
+      editor.value = text;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    editor.textContent = text;
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function findSaveButton(editor) {
+    const roots = [editor?.closest("[role='dialog']"), editor?.closest("form"), document].filter(Boolean);
+    const seen = new Set();
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const root of roots) {
+      const buttons = Array.from(root.querySelectorAll("button, [role='button']"));
+      for (const button of buttons) {
+        if (seen.has(button)) continue;
+        seen.add(button);
+        if (!isVisible(button)) continue;
+        const text = elementText(button).toLowerCase();
+        if (!text) continue;
+
+        let score = 0;
+        if (text === "save") score += 12;
+        if (text.includes("save note")) score += 14;
+        if (text.includes("save")) score += 8;
+        if (text.includes("log activity")) score += 7;
+        if (text.includes("create") && text.includes("note")) score += 6;
+        if (text.includes("cancel") || text.includes("discard") || text.includes("close")) score -= 10;
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = button;
+        }
       }
     }
 
-    return { ok: true, created, failed };
+    return bestScore > 0 ? best : null;
+  }
+
+  async function createNoteOnPage(noteBody) {
+    const text = cleanText(noteBody || "");
+    if (!text) throw new Error("Note text is empty.");
+
+    let editor = null;
+    for (let i = 0; i < 20; i += 1) {
+      editor = findNoteEditor();
+      if (editor) break;
+      clickNoteTrigger();
+      await sleep(400);
+    }
+
+    if (!editor) {
+      throw new Error("Could not find note editor on contact page.");
+    }
+
+    setEditorText(editor, text);
+    await sleep(250);
+
+    const saveButton = findSaveButton(editor);
+    if (!saveButton) {
+      throw new Error("Could not find note save button.");
+    }
+
+    saveButton.click();
+    await sleep(1200);
+    return { ok: true };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -282,11 +372,15 @@
       return;
     }
 
-    if (message.type === "LOG_WHATSAPP_NOTES") {
-      const recordIds = Array.isArray(message.recordIds) ? message.recordIds : [];
+    if (message.type === "GET_PORTAL_ID") {
+      sendResponse({ ok: true, portalId: getPortalIdFromPath() });
+      return;
+    }
+
+    if (message.type === "CREATE_NOTE_ON_PAGE") {
       const noteBody = String(message.noteBody || "");
-      logWhatsappNotes(recordIds, noteBody)
-        .then((result) => sendResponse(result))
+      createNoteOnPage(noteBody)
+        .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error) }));
       return true;
     }

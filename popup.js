@@ -19,13 +19,15 @@ const logWhatsappBtn = document.getElementById("logWhatsappBtn");
 
 const countryPrefixInput = document.getElementById("countryPrefixInput");
 const messageTemplateInput = document.getElementById("messageTemplateInput");
+const noteTemplateInput = document.getElementById("noteTemplateInput");
 const rowFilterInput = document.getElementById("rowFilterInput");
 
 const SETTINGS_KEY = "popupSettings";
-const WHATSAPP_NOTE_TEXT = "Reached out on WhatsApp";
+const DEFAULT_NOTE_TEXT = "Reached out on WhatsApp";
 const DEFAULT_SETTINGS = {
   countryPrefix: "60",
   messageTemplate: "",
+  noteTemplate: DEFAULT_NOTE_TEXT,
   rowFilterWord: "",
   visibleColumns: {}
 };
@@ -195,6 +197,7 @@ function renderContacts() {
 
   const allShownSelected = displayedContacts.length > 0 && displayedContacts.every((c) => selectedKeys.has(contactKey(c)));
   const compactColumnLayout = visibleColumns.length <= 3;
+  const displayedByKey = new Map(displayedContacts.map((c) => [contactKey(c), c]));
 
   const headerHtml = visibleColumns
     .map(
@@ -228,6 +231,7 @@ function renderContacts() {
         <tr>
           <td class='sel'><input type='checkbox' class='row-select' data-key='${escapeHtml(key)}' ${checked} /></td>
           ${cellsHtml}
+          <td class='actions'><button type='button' class='row-action-btn row-add-note' data-key='${escapeHtml(key)}'>Add Note</button></td>
         </tr>
       `;
     })
@@ -239,6 +243,7 @@ function renderContacts() {
         <tr>
           <th class='sel'><input type='checkbox' id='selectAllShown' ${allShownSelected ? "checked" : ""} /></th>
           ${headerHtml}
+          <th class='actions'>Actions</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -269,6 +274,36 @@ function renderContacts() {
     });
   });
 
+  listEl.querySelectorAll(".row-add-note").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const key = button.getAttribute("data-key");
+      if (!key) return;
+      const contact = displayedByKey.get(key);
+      const recordId = getRecordIdForContact(contact);
+      if (!recordId) {
+        setStatus("Could not find Record ID for this row.");
+        return;
+      }
+
+      const defaultNote = settings.noteTemplate || DEFAULT_NOTE_TEXT;
+      const noteBody = window.prompt("Enter note text", defaultNote);
+      if (noteBody === null) return;
+      const text = String(noteBody || "").trim();
+      if (!text) {
+        setStatus("Note text cannot be empty.");
+        return;
+      }
+
+      const result = await createHubSpotNotes([recordId], text);
+      if (!result.ok) {
+        setStatus(result.error || "Could not create note.");
+        return;
+      }
+
+      setStatus("Note logged.");
+    });
+  });
+
   const selectAllShown = document.getElementById("selectAllShown");
   if (selectAllShown) {
     selectAllShown.addEventListener("change", () => {
@@ -292,6 +327,7 @@ function settingsFromForm() {
   return {
     countryPrefix: (countryPrefixInput.value || "").replace(/\D/g, "") || "60",
     messageTemplate: String(messageTemplateInput?.value || "").trim(),
+    noteTemplate: String(noteTemplateInput?.value || "").trim() || DEFAULT_NOTE_TEXT,
     rowFilterWord: String(rowFilterInput?.value || "")
       .replace(/\s+/g, " ")
       .trim(),
@@ -302,6 +338,7 @@ function settingsFromForm() {
 function fillSettingsForm() {
   countryPrefixInput.value = settings.countryPrefix;
   if (messageTemplateInput) messageTemplateInput.value = settings.messageTemplate || "";
+  if (noteTemplateInput) noteTemplateInput.value = settings.noteTemplate || DEFAULT_NOTE_TEXT;
   if (rowFilterInput) rowFilterInput.value = settings.rowFilterWord || "";
   renderColumnChecks();
 }
@@ -415,12 +452,15 @@ function findRecordIdColumn() {
   );
 }
 
+function getRecordIdForContact(contact) {
+  const recordIdColumn = findRecordIdColumn();
+  if (!recordIdColumn) return "";
+  return String(contact?.values?.[recordIdColumn.id] || "").replace(/\D/g, "");
+}
+
 function getSelectedRecordIds() {
   const contacts = getSelectedContacts();
-  const recordIdColumn = findRecordIdColumn();
-  if (!recordIdColumn) return [];
-
-  return [...new Set(contacts.map((c) => String(c.values?.[recordIdColumn.id] || "").replace(/\D/g, "")).filter(Boolean))];
+  return [...new Set(contacts.map((c) => getRecordIdForContact(c)).filter(Boolean))];
 }
 
 async function findHubSpotTab() {
@@ -434,6 +474,118 @@ async function findHubSpotTab() {
   });
 
   return sorted[0] || null;
+}
+
+function extractPortalIdFromUrl(url) {
+  const match = String(url || "").match(/\/contacts\/(\d+)\//i);
+  return match ? match[1] : "";
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForTabComplete(tabId, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+      reject(new Error("Timed out waiting for HubSpot tab to load."));
+    }, timeoutMs);
+
+    const handleUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId !== tabId) return;
+      if (changeInfo.status !== "complete") return;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+      resolve();
+    };
+
+    chrome.tabs.onUpdated.addListener(handleUpdated);
+  });
+}
+
+async function getPortalId(hubSpotTab) {
+  const fromUrl = extractPortalIdFromUrl(hubSpotTab?.url || "");
+  if (fromUrl) return fromUrl;
+
+  if (!hubSpotTab || typeof hubSpotTab.id !== "number") return "";
+  try {
+    const response = await chrome.tabs.sendMessage(hubSpotTab.id, { type: "GET_PORTAL_ID" });
+    return String(response?.portalId || "");
+  } catch (_error) {
+    return "";
+  }
+}
+
+async function sendCreateNoteMessage(tabId, noteBody) {
+  let lastError = "";
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: "CREATE_NOTE_ON_PAGE",
+        noteBody
+      });
+      if (response?.ok) return response;
+      lastError = String(response?.error || "Unknown note creation error.");
+    } catch (error) {
+      lastError = String(error);
+    }
+    await sleep(700);
+  }
+
+  throw new Error(lastError || "Could not reach note automation on HubSpot tab.");
+}
+
+async function createSingleHubSpotNote(recordId, noteBody, portalId) {
+  const cleanId = String(recordId || "").replace(/\D/g, "");
+  if (!cleanId) {
+    throw new Error("Invalid Record ID.");
+  }
+
+  const url = `https://app.hubspot.com/contacts/${portalId}/record/0-1/${cleanId}?interaction=note`;
+  const tab = await chrome.tabs.create({ url, active: false });
+  if (!tab || typeof tab.id !== "number") {
+    throw new Error("Could not open HubSpot contact tab.");
+  }
+
+  try {
+    await waitForTabComplete(tab.id);
+    await sleep(900);
+    await sendCreateNoteMessage(tab.id, noteBody);
+  } finally {
+    try {
+      await chrome.tabs.remove(tab.id);
+    } catch (_error) {
+      // Ignore tab close failures.
+    }
+  }
+}
+
+async function createHubSpotNotes(recordIds, noteBody) {
+  const hubSpotTab = await findHubSpotTab();
+  if (!hubSpotTab || typeof hubSpotTab.id !== "number") {
+    return { ok: false, error: "Open a HubSpot tab (app.hubspot.com), refresh it, and try again." };
+  }
+
+  const portalId = await getPortalId(hubSpotTab);
+  if (!portalId) {
+    return { ok: false, error: "Could not detect HubSpot portal ID." };
+  }
+
+  const uniqueRecordIds = [...new Set((Array.isArray(recordIds) ? recordIds : []).map((id) => String(id || "").replace(/\D/g, "")).filter(Boolean))];
+  const failed = [];
+  let created = 0;
+
+  for (const recordId of uniqueRecordIds) {
+    try {
+      await createSingleHubSpotNote(recordId, noteBody, portalId);
+      created += 1;
+    } catch (error) {
+      failed.push({ recordId, error: String(error) });
+    }
+  }
+
+  return { ok: true, created, failed };
 }
 
 async function copyTextToClipboard(text) {
@@ -510,33 +662,19 @@ async function logWhatsappNoteSelected() {
     return;
   }
 
-  try {
-    const tab = await findHubSpotTab();
-    if (!tab || typeof tab.id !== "number") {
-      setStatus("Open a HubSpot tab (app.hubspot.com), refresh it, and try again.");
-      return;
-    }
+  const noteBody = settings.noteTemplate || DEFAULT_NOTE_TEXT;
+  const result = await createHubSpotNotes(recordIds, noteBody);
+  if (!result.ok) {
+    setStatus(result.error || "Could not create notes.");
+    return;
+  }
 
-    const response = await chrome.tabs.sendMessage(tab.id, {
-      type: "LOG_WHATSAPP_NOTES",
-      recordIds,
-      noteBody: WHATSAPP_NOTE_TEXT
-    });
-
-    if (!response || !response.ok) {
-      setStatus("Could not create notes. Open HubSpot tab and try again.");
-      return;
-    }
-
-    const created = Number(response.created || 0);
-    const failed = Array.isArray(response.failed) ? response.failed.length : 0;
-    if (failed > 0) {
-      setStatus(`Logged ${created} note(s). Failed ${failed}.`);
-    } else {
-      setStatus(`Logged ${created} note(s).`);
-    }
-  } catch (_error) {
-    setStatus("Could not create notes. Open HubSpot tab and try again.");
+  const created = Number(result.created || 0);
+  const failed = Array.isArray(result.failed) ? result.failed.length : 0;
+  if (failed > 0) {
+    setStatus(`Logged ${created} note(s). Failed ${failed}.`);
+  } else {
+    setStatus(`Logged ${created} note(s).`);
   }
 }
 
