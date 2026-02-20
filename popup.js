@@ -29,11 +29,11 @@ const noteTemplateInput = document.getElementById("noteTemplateInput");
 const rowFilterInput = document.getElementById("rowFilterInput");
 
 const SETTINGS_KEY = "popupSettings";
-const DEFAULT_NOTE_TEXT = "Reached out on WhatsApp";
+const LEGACY_NOTE_TEXT = "Reached out on WhatsApp";
 const DEFAULT_SETTINGS = {
   countryPrefix: "60",
   messageTemplate: "",
-  noteTemplate: DEFAULT_NOTE_TEXT,
+  noteTemplate: "",
   rowFilterWord: "",
   visibleColumns: {}
 };
@@ -338,7 +338,7 @@ function settingsFromForm() {
   return {
     countryPrefix: (countryPrefixInput.value || "").replace(/\D/g, "") || "60",
     messageTemplate: String(messageTemplateInput?.value || "").trim(),
-    noteTemplate: String(noteTemplateInput?.value || "").trim() || DEFAULT_NOTE_TEXT,
+    noteTemplate: String(noteTemplateInput?.value || "").trim(),
     rowFilterWord: String(rowFilterInput?.value || "")
       .replace(/\s+/g, " ")
       .trim(),
@@ -349,7 +349,7 @@ function settingsFromForm() {
 function fillSettingsForm() {
   countryPrefixInput.value = settings.countryPrefix;
   if (messageTemplateInput) messageTemplateInput.value = settings.messageTemplate || "";
-  if (noteTemplateInput) noteTemplateInput.value = settings.noteTemplate || DEFAULT_NOTE_TEXT;
+  if (noteTemplateInput) noteTemplateInput.value = settings.noteTemplate || "";
   if (rowFilterInput) rowFilterInput.value = settings.rowFilterWord || "";
   renderColumnChecks();
 }
@@ -375,6 +375,11 @@ async function loadSettings() {
       ...((saved && saved.visibleColumns) || {})
     }
   };
+
+  if (settings.noteTemplate === LEGACY_NOTE_TEXT) {
+    settings.noteTemplate = "";
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+  }
 }
 
 async function saveSettings() {
@@ -445,7 +450,7 @@ function openNotesDialog(contact, recordId) {
   };
 
   if (notesTitleEl) notesTitleEl.textContent = `Notes - ${notesDialogState.contactName}`;
-  if (notesTextInput) notesTextInput.value = settings.noteTemplate || DEFAULT_NOTE_TEXT;
+  if (notesTextInput) notesTextInput.value = settings.noteTemplate || "";
 
   setNotesDialogBusy(false);
   renderNotesHistory();
@@ -504,7 +509,7 @@ async function saveNoteFromDialog() {
 
   notesDialogState.notes = [text, ...notesDialogState.notes];
   renderNotesHistory();
-  if (notesTextInput) notesTextInput.value = settings.noteTemplate || DEFAULT_NOTE_TEXT;
+  if (notesTextInput) notesTextInput.value = settings.noteTemplate || "";
   setStatus("Note logged.");
 }
 
@@ -838,7 +843,11 @@ async function logWhatsappNoteSelected() {
     return;
   }
 
-  const noteBody = settings.noteTemplate || DEFAULT_NOTE_TEXT;
+  const noteBody = String(settings.noteTemplate || "").trim();
+  if (!noteBody) {
+    setStatus("Default note is empty. Set one in Settings or use row Notes.");
+    return;
+  }
   const result = await createHubSpotNotes(recordIds, noteBody);
   if (!result.ok) {
     setStatus(result.error || "Could not create notes.");
