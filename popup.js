@@ -13,12 +13,15 @@ const columnChecks = document.getElementById("columnChecks");
 const refreshBtn = document.getElementById("refreshBtn");
 const csvSelectedBtn = document.getElementById("csvSelectedBtn");
 const vcfSelectedBtn = document.getElementById("vcfSelectedBtn");
+const copyEmailBtn = document.getElementById("copyEmailBtn");
 
 const countryPrefixInput = document.getElementById("countryPrefixInput");
+const rowFilterInput = document.getElementById("rowFilterInput");
 
 const SETTINGS_KEY = "popupSettings";
 const DEFAULT_SETTINGS = {
   countryPrefix: "60",
+  rowFilterWord: "",
   visibleColumns: {}
 };
 
@@ -80,6 +83,20 @@ function contactKey(contact) {
   return contact.key || currentColumns.map((col) => contact.values?.[col.id] || "").join("|");
 }
 
+function getFilterWord() {
+  return String(settings.rowFilterWord || "").trim().toLowerCase();
+}
+
+function getFilteredContacts(source = currentContacts) {
+  const filterWord = getFilterWord();
+  if (!filterWord) return [...source];
+
+  return source.filter((contact) => {
+    const rowText = Object.values(contact.values || {}).join(" ").toLowerCase();
+    return !rowText.includes(filterWord);
+  });
+}
+
 function getVisibleColumns() {
   return currentColumns.filter((col) => settings.visibleColumns[col.id] !== false);
 }
@@ -139,22 +156,29 @@ function compareValues(a, b, field) {
 
 function renderContacts() {
   listEl.innerHTML = "";
+  const filteredContacts = getFilteredContacts();
+  const visibleKeys = new Set(filteredContacts.map((c) => contactKey(c)));
+  selectedKeys = new Set([...selectedKeys].filter((key) => visibleKeys.has(key)));
   updateExportActionsVisibility();
 
-  if (!currentContacts.length) {
+  if (!filteredContacts.length) {
+    if (currentContacts.length && getFilterWord()) {
+      setStatus("No contacts match the current filter word.");
+      return;
+    }
     setStatus("No contacts with phone numbers found on this view.");
     return;
   }
 
   const visibleColumns = getVisibleColumns();
   if (!visibleColumns.length) {
-    setStatus(`Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`);
+    setStatus(`Found ${filteredContacts.length} contact(s). Selected ${selectedKeys.size}.`);
     listEl.innerHTML = "<div class='status'>Enable at least one column in Settings.</div>";
     return;
   }
 
-  displayedContacts = getSortedContacts(currentContacts);
-  setStatus(`Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`);
+  displayedContacts = getSortedContacts(filteredContacts);
+  setStatus(`Found ${filteredContacts.length} contact(s). Selected ${selectedKeys.size}.`);
 
   const allShownSelected = displayedContacts.length > 0 && displayedContacts.every((c) => selectedKeys.has(contactKey(c)));
 
@@ -224,7 +248,7 @@ function renderContacts() {
       if (input.checked) selectedKeys.add(key);
       else selectedKeys.delete(key);
       updateExportActionsVisibility();
-      setStatus(`Found ${currentContacts.length} contact(s). Selected ${selectedKeys.size}.`);
+      setStatus(`Found ${filteredContacts.length} contact(s). Selected ${selectedKeys.size}.`);
     });
   });
 
@@ -250,12 +274,16 @@ function settingsFromForm() {
 
   return {
     countryPrefix: (countryPrefixInput.value || "").replace(/\D/g, "") || "60",
+    rowFilterWord: String(rowFilterInput?.value || "")
+      .replace(/\s+/g, " ")
+      .trim(),
     visibleColumns
   };
 }
 
 function fillSettingsForm() {
   countryPrefixInput.value = settings.countryPrefix;
+  if (rowFilterInput) rowFilterInput.value = settings.rowFilterWord || "";
   renderColumnChecks();
 }
 
@@ -309,7 +337,7 @@ function downloadText(filename, content, mimeType) {
 }
 
 function getSelectedContacts() {
-  return currentContacts.filter((c) => selectedKeys.has(contactKey(c)));
+  return getFilteredContacts().filter((c) => selectedKeys.has(contactKey(c)));
 }
 
 function updateExportActionsVisibility() {
@@ -357,6 +385,28 @@ function toVcf(contacts) {
     .join("\n");
 }
 
+function findEmailColumn() {
+  return currentColumns.find((c) => /email/i.test(c.label) || /^email(_\d+)?$/i.test(c.id)) || null;
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  return copied;
+}
+
 function exportCsvSelected() {
   const contacts = getSelectedContacts();
   if (!contacts.length) {
@@ -377,6 +427,33 @@ function exportVcfSelected() {
 
   const vcf = toVcf(contacts);
   downloadText("hubspot-contacts-selected.vcf", vcf, "text/vcard;charset=utf-8");
+}
+
+async function copyEmailSelected() {
+  const contacts = getSelectedContacts();
+  if (!contacts.length) {
+    setStatus("No selected contacts to copy emails from.");
+    return;
+  }
+
+  const emailColumn = findEmailColumn();
+  if (!emailColumn) {
+    setStatus("No email column detected.");
+    return;
+  }
+
+  const emails = [...new Set(contacts.map((c) => String(c.values?.[emailColumn.id] || "").trim()).filter(Boolean))];
+  if (!emails.length) {
+    setStatus("No email values found in selected rows.");
+    return;
+  }
+
+  try {
+    await copyTextToClipboard(emails.join(", "));
+    setStatus(`Copied ${emails.length} email(s).`);
+  } catch (_error) {
+    setStatus("Could not copy emails to clipboard.");
+  }
 }
 
 async function loadContacts() {
@@ -425,6 +502,9 @@ settingsOverlay.addEventListener("click", (event) => {
 refreshBtn.addEventListener("click", loadContacts);
 csvSelectedBtn.addEventListener("click", exportCsvSelected);
 vcfSelectedBtn.addEventListener("click", exportVcfSelected);
+copyEmailBtn.addEventListener("click", () => {
+  void copyEmailSelected();
+});
 
 async function init() {
   await loadSettings();

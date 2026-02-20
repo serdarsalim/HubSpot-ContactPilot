@@ -406,6 +406,7 @@
       <span id="statusActions" class="status-actions" hidden>
         <button id="csvSelectedBtn" class="status-action" type="button">CSV Selected</button>
         <button id="vcfSelectedBtn" class="status-action" type="button">VCF Selected</button>
+        <button id="copyEmailBtn" class="status-action" type="button">Copy Email</button>
       </span>
     </div>
     <div id="list" class="list"></div>
@@ -420,6 +421,11 @@
         <div class="field">
           <label for="countryPrefixInput">Default country prefix (digits only)</label>
           <input id="countryPrefixInput" type="text" placeholder="60" />
+        </div>
+
+        <div class="field">
+          <label for="rowFilterInput">Filter out rows containing this word</label>
+          <input id="rowFilterInput" type="text" placeholder="preview" />
         </div>
 
         <div class="field">
