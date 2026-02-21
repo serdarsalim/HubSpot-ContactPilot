@@ -752,6 +752,7 @@
     const classText = cleanText(
       `${el.className || ""} ${el.getAttribute?.("data-slate-editor") || ""} ${el.getAttribute?.("data-editor") || ""}`
     ).toLowerCase();
+    const contentEditableAttr = String(el.getAttribute?.("contenteditable") || "").toLowerCase();
 
     let score = 0;
     if (hint.includes("message") || hint.includes("body") || hint.includes("email") || hint.includes("content")) score += 12;
@@ -763,6 +764,12 @@
     if (classText.includes("prosemirror")) score += 18;
     if (classText.includes("ql-editor")) score += 16;
     if (classText.includes("slate")) score += 12;
+    if (classText.includes("prosemirror__dom")) score -= 28;
+    if (contentEditableAttr === "false") score -= 26;
+    if (tag !== "iframe" && tag !== "textarea" && tag !== "input" && contentEditableAttr !== "true") {
+      const hasEditableDescendant = !!el.querySelector?.("[contenteditable='true'], textarea, input, [role='textbox']");
+      if (!hasEditableDescendant) score -= 14;
+    }
 
     if (tag === "iframe") {
       if (getIframeEditorElement(el)) score += 12;
@@ -881,55 +888,16 @@
     if (!(editor instanceof Element)) return null;
     if (editor.matches("textarea, input") || editor.getAttribute("contenteditable") === "true") return editor;
 
+    const ancestorEditable = editor.closest("[contenteditable='true'], textarea, input, [role='textbox']");
+    if (ancestorEditable instanceof Element) return ancestorEditable;
+
     const nestedEditable = editor.querySelector("[contenteditable='true'], textarea, input, [role='textbox']");
     if (nestedEditable instanceof Element) return nestedEditable;
     return editor;
   }
 
-  function findProseMirrorView(target) {
-    if (!(target instanceof Element)) return null;
-    const roots = [target, target.closest("[class*='ProseMirror']"), ...Array.from(document.querySelectorAll("[class*='ProseMirror']"))].filter(
-      Boolean
-    );
-
-    for (const root of roots) {
-      let node = root;
-      while (node && node instanceof Element) {
-        const direct = node.pmViewDesc?.view || node.__prosemirrorView || null;
-        if (direct && typeof direct.dispatch === "function") return direct;
-        node = node.parentElement;
-      }
-    }
-    return null;
-  }
-
-  function tryProseMirrorInsert(target, text, html = "") {
-    const value = String(text || htmlToPlainText(html) || "").trim();
-    if (!value) return false;
-    const view = findProseMirrorView(target);
-    if (!view || !view.state?.tr || typeof view.dispatch !== "function") return false;
-
-    try {
-      if (typeof view.focus === "function") view.focus();
-      const baseTr = view.state.tr;
-      const from = Number(baseTr.selection?.from) || 1;
-      const to = Number(baseTr.selection?.to) || from;
-      const nextTr = baseTr.insertText(`${value}\n\n`, from, to);
-      view.dispatch(nextTr.scrollIntoView());
-
-      const docText = String(view.state?.doc?.textBetween?.(0, view.state.doc.content.size, "\n", "\n") || "");
-      return docText.includes(value.slice(0, Math.min(24, value.length)));
-    } catch (_error) {
-      return false;
-    }
-  }
-
-  function prependInContentEditable(target, insertHtml, textFallback) {
+  function prependInContentEditable(target, insertHtml) {
     if (!target) return false;
-    if (tryProseMirrorInsert(target, textFallback || htmlToPlainText(insertHtml), insertHtml)) {
-      dispatchInputLikeEvents(target);
-      return true;
-    }
 
     if (!target.isContentEditable) {
       return false;
@@ -955,13 +923,12 @@
     if (insertHtml && typeof ownerDoc.execCommand === "function") {
       applied = ownerDoc.execCommand("insertHTML", false, `${insertHtml}<p><br></p>`);
     }
-    if (!applied && textFallback && typeof ownerDoc.execCommand === "function") {
-      applied = ownerDoc.execCommand("insertText", false, `${textFallback}\n\n`);
-    }
     if (!applied) {
       const currentHtml = String(target.innerHTML || "");
-      target.innerHTML = currentHtml ? `${insertHtml || escapeHtml(textFallback)}<p><br></p>${currentHtml}` : insertHtml || escapeHtml(textFallback);
+      target.innerHTML = currentHtml ? `${insertHtml}<p><br></p>${currentHtml}` : insertHtml;
+      applied = true;
     }
+    if (!applied) return false;
 
     const after = cleanText(target.textContent || "");
     dispatchInputLikeEvents(target);
@@ -1006,25 +973,7 @@
       return true;
     }
 
-    if (prependInContentEditable(target, value, plain)) return true;
-    return false;
-  }
-
-  function prependEditorText(editor, text) {
-    const value = String(text || "").trim();
-    if (!value) return false;
-    const target = resolveEditorTarget(editor);
-    if (!target) return false;
-
-    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
-      const current = String(target.value || "");
-      target.value = current ? `${value}\n\n${current}` : value;
-      dispatchInputLikeEvents(target);
-      return true;
-    }
-
-    const escaped = escapeHtml(value).replace(/\r\n/g, "\n").replace(/\n/g, "<br>");
-    if (prependInContentEditable(target, escaped, value)) return true;
+    if (prependInContentEditable(target, value)) return true;
     return false;
   }
 
@@ -1075,18 +1024,14 @@
 
     const bodyText = String(body || "").trim();
     const bodyRichHtml = String(bodyHtml || "").trim();
-    if (bodyText || bodyRichHtml) {
+    const bodyInsertHtml = toInsertableHtml(bodyRichHtml || bodyText);
+    if (bodyInsertHtml) {
       let bodyApplied = false;
       for (let attempt = 0; attempt < 6 && !bodyApplied; attempt += 1) {
         const bodyEditors = getBodyEditorCandidates(dialog);
         for (const bodyEditor of bodyEditors) {
           clearEditorContent(bodyEditor);
-          const appliedHtml = bodyRichHtml ? prependEditorHtml(bodyEditor, bodyRichHtml) : false;
-          if (appliedHtml) {
-            bodyApplied = true;
-            break;
-          }
-          if (bodyText && prependEditorText(bodyEditor, bodyText)) {
+          if (prependEditorHtml(bodyEditor, bodyInsertHtml)) {
             bodyApplied = true;
             break;
           }
@@ -1100,7 +1045,7 @@
           if (fallbackEditor) {
             clearEditorContent(fallbackEditor);
           }
-          if (fallbackEditor && bodyText && prependEditorText(fallbackEditor, bodyText)) {
+          if (fallbackEditor && prependEditorHtml(fallbackEditor, bodyInsertHtml)) {
             bodyApplied = true;
             break;
           }
