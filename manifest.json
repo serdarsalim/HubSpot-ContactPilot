@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "HubSpot WhatsApp Contacts",
+  "name": "ContactPilot",
   "version": "2.0.0",
-  "description": "Popup list of HubSpot contacts with WhatsApp-ready phone links.",
+  "description": "Contact workflow sidecar with WhatsApp links, notes, and email templates.",
   "permissions": [
     "storage",
     "tabs"
   ],
   "action": {
-    "default_title": "HubSpot WhatsApp Contacts"
+    "default_title": "ContactPilot"
   },
   "background": {
     "service_worker": "background.js"
