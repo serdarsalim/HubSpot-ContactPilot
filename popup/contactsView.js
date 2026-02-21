@@ -2,6 +2,37 @@
   const App = window.PopupApp;
   const { dom, state, constants } = App;
   const MT = App.messageTypes;
+  const RECORD_ID_COLUMN_PATTERN = /^(record_id|recordid|hs_object_id|hs_objectid)$/i;
+
+  function findRecordIdColumn(columns) {
+    return columns.find((col) => /record\s*id/i.test(col.label) || RECORD_ID_COLUMN_PATTERN.test(col.id)) || null;
+  }
+
+  function dedupeContactsByRecordId(contacts, columns) {
+    const source = Array.isArray(contacts) ? contacts : [];
+    if (!source.length) return [];
+
+    const recordIdColumn = findRecordIdColumn(Array.isArray(columns) ? columns : []);
+    if (!recordIdColumn) {
+      return source;
+    }
+
+    const seenRecordIds = new Set();
+    const deduped = [];
+
+    for (const contact of source) {
+      const recordId = String(contact?.values?.[recordIdColumn.id] || contact?.recordId || "").replace(/\D/g, "");
+      if (!recordId) {
+        deduped.push(contact);
+        continue;
+      }
+      if (seenRecordIds.has(recordId)) continue;
+      seenRecordIds.add(recordId);
+      deduped.push(contact);
+    }
+
+    return deduped;
+  }
 
   function renderContacts() {
     dom.listEl.innerHTML = "";
@@ -198,7 +229,7 @@
       }
 
       state.currentColumns = response.columns || [];
-      state.currentContacts = response.contacts || [];
+      state.currentContacts = dedupeContactsByRecordId(response.contacts || [], state.currentColumns);
       state.phoneColumnId = response.phoneColumnId || null;
       state.currentPortalId = (await App.getPortalId(tab)) || "";
 

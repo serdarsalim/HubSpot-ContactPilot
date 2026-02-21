@@ -183,7 +183,15 @@
     return values;
   }
 
-  function buildContactFromValues(values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText) {
+  function extractRecordIdFromRow(row) {
+    if (!(row instanceof Element)) return "";
+    const anchor = row.querySelector("a[href*='/record/0-1/']");
+    const href = anchor?.getAttribute("href") || "";
+    const match = String(href).match(/\/record\/0-1\/(\d+)/i);
+    return match ? String(match[1]) : "";
+  }
+
+  function buildContactFromValues(row, values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText) {
     if (!values) return null;
     const hasAny = Object.values(values).some(Boolean);
     if (!hasAny) return null;
@@ -202,10 +210,12 @@
     const baseWaUrl = phoneDigits ? `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number` : "";
     const text = cleanText(applyMessageTemplate(messageText, values, nameColumnId));
     const waUrl = baseWaUrl ? (text ? `${baseWaUrl}&text=${encodeURIComponent(text)}` : baseWaUrl) : "";
-    const key = columns.map((c) => values[c.id] || "").join("|");
+    const recordId = extractRecordIdFromRow(row);
+    const key = recordId ? `record_${recordId}` : columns.map((c) => values[c.id] || "").join("|");
 
     return {
       key,
+      recordId,
       values,
       phoneDisplay: phoneRaw || values[phoneColumnId || ""] || "",
       phoneDigits,
@@ -216,7 +226,7 @@
   function collectContactsFromRows(rows, columns, phoneColumnId, nameColumnId, countryPrefix, messageText, seenKeys, contacts) {
     for (const row of rows) {
       const values = extractValuesFromRow(row, columns);
-      const contact = buildContactFromValues(values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText);
+      const contact = buildContactFromValues(row, values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText);
       if (!contact) continue;
       if (seenKeys.has(contact.key)) continue;
       seenKeys.add(contact.key);
