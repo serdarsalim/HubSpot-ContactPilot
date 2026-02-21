@@ -1020,6 +1020,36 @@
     return false;
   }
 
+  function clearEditorContent(editor) {
+    const target = resolveEditorTarget(editor);
+    if (!target) return false;
+
+    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+      if (String(target.value || "").length === 0) return true;
+      target.value = "";
+      dispatchInputLikeEvents(target);
+      return true;
+    }
+
+    const root = target.closest(".ProseMirror") || target;
+    if (!(root instanceof Element)) return false;
+
+    const signature = root.querySelector(".hs-signature");
+    if (signature instanceof Element && root.contains(signature)) {
+      while (root.firstChild && root.firstChild !== signature) {
+        root.removeChild(root.firstChild);
+      }
+      dispatchInputLikeEvents(root);
+      return true;
+    }
+
+    if (root.innerHTML) {
+      root.innerHTML = "";
+      dispatchInputLikeEvents(root);
+    }
+    return true;
+  }
+
   async function applyEmailTemplateOnPage(subject, body, bodyHtml = "") {
     const dialog = findOpenEmailDialog();
     if (!dialog) {
@@ -1042,6 +1072,7 @@
       for (let attempt = 0; attempt < 6 && !bodyApplied; attempt += 1) {
         const bodyEditors = getBodyEditorCandidates(dialog);
         for (const bodyEditor of bodyEditors) {
+          clearEditorContent(bodyEditor);
           const appliedHtml = bodyRichHtml ? prependEditorHtml(bodyEditor, bodyRichHtml) : false;
           if (appliedHtml) {
             bodyApplied = true;
@@ -1058,6 +1089,9 @@
         await sleep(180);
         if (attempt === 2) {
           const fallbackEditor = findBodyEditor(dialog);
+          if (fallbackEditor) {
+            clearEditorContent(fallbackEditor);
+          }
           if (fallbackEditor && bodyText && prependEditorText(fallbackEditor, bodyText)) {
             bodyApplied = true;
             break;

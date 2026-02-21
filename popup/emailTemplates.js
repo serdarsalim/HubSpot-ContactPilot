@@ -14,12 +14,14 @@
     "undo redo"
   ].join(" | ");
   const AUTOSAVE_DELAY_MS = 1000;
+  const FORM_SYNC_RELEASE_DELAY_MS = 140;
   let emailBodyEditorInitPromise = null;
   let tinyEditorUnavailable = false;
   let autosaveTimerId = null;
   let autosaveInFlight = false;
   let autosaveQueued = false;
   let lastSavedDraftSignature = "";
+  let formSyncReleaseTimerId = null;
 
   function htmlToPlainText(value) {
     const raw = String(value || "");
@@ -77,6 +79,25 @@
     } catch (_stringifyError) {
       return String(error);
     }
+  }
+
+  function beginTemplateFormSync() {
+    state.syncingEmailTemplateForm = true;
+    if (formSyncReleaseTimerId) {
+      clearTimeout(formSyncReleaseTimerId);
+      formSyncReleaseTimerId = null;
+    }
+  }
+
+  function endTemplateFormSyncDeferred(delayMs = FORM_SYNC_RELEASE_DELAY_MS) {
+    if (formSyncReleaseTimerId) {
+      clearTimeout(formSyncReleaseTimerId);
+      formSyncReleaseTimerId = null;
+    }
+    formSyncReleaseTimerId = setTimeout(() => {
+      state.syncingEmailTemplateForm = false;
+      formSyncReleaseTimerId = null;
+    }, Math.max(0, Number(delayMs) || 0));
   }
 
   async function saveEmailTemplateDraftNow(force = false) {
@@ -264,11 +285,11 @@
     if (dom.emailTemplateEditorEl) dom.emailTemplateEditorEl.hidden = !hasActive;
     if (!hasActive) return;
 
-    state.syncingEmailTemplateForm = true;
+    beginTemplateFormSync();
     if (dom.emailTemplateNameInput) dom.emailTemplateNameInput.value = active.name || "";
     if (dom.emailTemplateSubjectInput) dom.emailTemplateSubjectInput.value = active.subject || "";
     writeEmailBodyValueToForm(active.body || "");
-    state.syncingEmailTemplateForm = false;
+    endTemplateFormSyncDeferred();
   }
 
   function renderEmailTemplatesPage() {
