@@ -117,13 +117,9 @@
       .title-logo {
         width: 22px;
         height: 22px;
-        color: #0b66c3;
         flex: 0 0 auto;
-      }
-
-      .title-logo path,
-      .title-logo circle {
-        fill: currentColor;
+        border-radius: 6px;
+        object-fit: cover;
       }
 
       .title-tools {
@@ -1060,9 +1056,7 @@
       <div id="stickyHead" class="sticky-head">
         <div class="topbar">
           <h1 class="title-brand">
-            <svg class="title-logo" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M13.3 2.6 6.8 12.1h4.6l-1.1 9.3 6.6-9.5h-4.6z"></path>
-            </svg>
+            <img class="title-logo" src="icons/icon-32.png" alt="" aria-hidden="true" />
             <span>ContactPilot</span>
           </h1>
           <div class="title-tools">
