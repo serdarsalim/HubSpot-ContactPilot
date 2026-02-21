@@ -47,7 +47,8 @@
     const total = Array.isArray(filteredContacts) ? filteredContacts.length : 0;
     const selected = state.selectedKeys.size;
     const newCount = countNewContacts(filteredContacts || []);
-    App.setStatus(`Found ${total} contact(s). Selected ${selected}. ${newCount} new.`);
+    const selectedPart = selected > 0 ? ` Selected ${selected}.` : "";
+    App.setStatus(`Found ${total} contact(s).${selectedPart} ${newCount} new.`);
   }
 
   function renderContacts() {

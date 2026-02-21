@@ -490,6 +490,8 @@
         gap: 12px;
         flex: 1;
         min-height: 0;
+        box-sizing: border-box;
+        padding-right: 10px;
       }
 
       .settings-page[hidden] {
@@ -540,13 +542,24 @@
 
       .settings-card {
         width: 100%;
-        max-width: none;
+        max-width: 1440px;
+        margin: 0 auto;
         background: var(--card);
         border: 1px solid var(--line);
         border-radius: 14px;
         padding: 14px;
         box-shadow: 0 8px 20px rgba(8, 30, 60, 0.08);
         overflow-y: auto;
+      }
+
+      .settings-message-note-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .settings-message-note-grid .field {
+        margin-bottom: 0;
       }
 
       .template-import-card {
@@ -743,6 +756,10 @@
       }
 
       @media (max-width: 920px) {
+        .settings-message-note-grid {
+          grid-template-columns: 1fr;
+        }
+
         .checks {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
@@ -1134,14 +1151,16 @@
           <input id="countryPrefixInput" type="text" placeholder="60" />
         </div>
 
-        <div class="field">
-          <label for="messageTemplateInput">Default WhatsApp message (prefilled, use [name] for first name)</label>
-          <textarea id="messageTemplateInput" placeholder="Hi, I am reaching out regarding..."></textarea>
-        </div>
+        <div class="settings-message-note-grid">
+          <div class="field">
+            <label for="messageTemplateInput">Default WhatsApp message (prefilled, use [name] for first name)</label>
+            <textarea id="messageTemplateInput" placeholder="Hi, I am reaching out regarding..."></textarea>
+          </div>
 
-        <div class="field">
-          <label for="noteTemplateInput">Default note for Actions > Notes</label>
-          <textarea id="noteTemplateInput"></textarea>
+          <div class="field">
+            <label for="noteTemplateInput">Default note for Actions > Notes</label>
+            <textarea id="noteTemplateInput"></textarea>
+          </div>
         </div>
 
         <div class="field">
