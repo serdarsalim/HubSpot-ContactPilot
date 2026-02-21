@@ -57,10 +57,15 @@
 
   function openEmailSettings() {
     App.closeEmailTemplatePicker();
-    App.loadEmailTemplatesDraftFromSettings();
-    App.renderEmailTemplatesPage();
     if (dom.mainPageEl) dom.mainPageEl.hidden = true;
     if (dom.emailTemplatesPageEl) dom.emailTemplatesPageEl.hidden = false;
+    App.loadEmailTemplatesDraftFromSettings();
+    App.renderEmailTemplatesPage();
+    if (typeof App.ensureEmailBodyEditor === "function") {
+      void App.ensureEmailBodyEditor().then(() => {
+        App.renderActiveEmailTemplateEditor();
+      });
+    }
   }
 
   function closeEmailSettings() {

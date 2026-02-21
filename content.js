@@ -686,9 +686,64 @@
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function htmlToPlainText(value) {
+    const raw = String(value || "");
+    if (!raw) return "";
+    if (!/<[a-z][\s\S]*>/i.test(raw)) return cleanText(raw);
+    const container = document.createElement("div");
+    container.innerHTML = raw;
+    return cleanText(container.textContent || "");
+  }
+
+  function sanitizeEditorHtml(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const template = document.createElement("template");
+    template.innerHTML = raw;
+    template.content.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((node) => node.remove());
+    template.content.querySelectorAll("*").forEach((el) => {
+      for (const attr of Array.from(el.attributes)) {
+        if (/^on/i.test(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    });
+    return template.innerHTML.trim();
+  }
+
+  function prependEditorHtml(editor, html) {
+    const value = sanitizeEditorHtml(html);
+    if (!value) return false;
+    editor.focus();
+
+    if (editor.tagName === "TEXTAREA" || editor.tagName === "INPUT") {
+      const textValue = htmlToPlainText(value);
+      if (!textValue) return false;
+      const current = String(editor.value || "");
+      editor.value = current ? `${textValue}\n\n${current}` : textValue;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const template = document.createElement("template");
+    template.innerHTML = `${value}<p><br></p>`;
+    range.insertNode(template.content);
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
   function prependEditorText(editor, text) {
     const value = String(text || "").trim();
-    if (!value) return;
+    if (!value) return false;
     editor.focus();
 
     if (editor.tagName === "TEXTAREA" || editor.tagName === "INPUT") {
@@ -696,7 +751,7 @@
       editor.value = current ? `${value}\n\n${current}` : value;
       editor.dispatchEvent(new Event("input", { bubbles: true }));
       editor.dispatchEvent(new Event("change", { bubbles: true }));
-      return;
+      return true;
     }
 
     const selection = window.getSelection();
@@ -712,9 +767,10 @@
     }
     editor.dispatchEvent(new InputEvent("input", { bubbles: true, data: inserted, inputType: "insertText" }));
     editor.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
   }
 
-  async function applyEmailTemplateOnPage(subject, body) {
+  async function applyEmailTemplateOnPage(subject, body, bodyHtml = "") {
     const dialog = findOpenEmailDialog();
     if (!dialog) {
       throw new Error("Open a HubSpot Email composer first.");
@@ -730,12 +786,17 @@
     }
 
     const bodyText = String(body || "").trim();
-    if (bodyText) {
+    const bodyRichHtml = String(bodyHtml || "").trim();
+    if (bodyText || bodyRichHtml) {
       const bodyEditor = findBodyEditor(dialog);
       if (!bodyEditor) {
         throw new Error("Could not find the email body editor.");
       }
-      prependEditorText(bodyEditor, bodyText);
+
+      const appliedHtml = bodyRichHtml ? prependEditorHtml(bodyEditor, bodyRichHtml) : false;
+      if (!appliedHtml && bodyText) {
+        prependEditorText(bodyEditor, bodyText);
+      }
     }
   }
 
@@ -755,7 +816,7 @@
     return true;
   }
 
-  async function openEmailAndApplyTemplateOnPage(subject, body) {
+  async function openEmailAndApplyTemplateOnPage(subject, body, bodyHtml = "") {
     for (let i = 0; i < TIMING.emailComposerOpenAttempts; i += 1) {
       const existing = findOpenEmailDialog();
       if (existing) break;
@@ -763,7 +824,7 @@
       await sleep(TIMING.emailComposerOpenDelayMs);
     }
 
-    await applyEmailTemplateOnPage(subject, body);
+    await applyEmailTemplateOnPage(subject, body, bodyHtml);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -805,7 +866,8 @@
     if (message.type === MESSAGE_TYPES.APPLY_EMAIL_TEMPLATE_ON_PAGE) {
       const subject = String(message.subject || "");
       const body = String(message.body || "");
-      applyEmailTemplateOnPage(subject, body)
+      const bodyHtml = String(message.bodyHtml || "");
+      applyEmailTemplateOnPage(subject, body, bodyHtml)
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error) }));
       return true;
@@ -814,7 +876,8 @@
     if (message.type === MESSAGE_TYPES.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE) {
       const subject = String(message.subject || "");
       const body = String(message.body || "");
-      openEmailAndApplyTemplateOnPage(subject, body)
+      const bodyHtml = String(message.bodyHtml || "");
+      openEmailAndApplyTemplateOnPage(subject, body, bodyHtml)
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error) }));
       return true;

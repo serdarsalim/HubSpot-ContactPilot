@@ -3,6 +3,121 @@
   const { dom, state, constants } = App;
   const MT = App.messageTypes;
   const timing = App.timing.popup;
+  const BODY_EDITOR_ID = "emailTemplateBodyInput";
+  let emailBodyEditorInitPromise = null;
+  let tinyEditorUnavailable = false;
+
+  function htmlToPlainText(value) {
+    const raw = String(value || "");
+    if (!raw) return "";
+    if (!/<[a-z][\s\S]*>/i.test(raw)) {
+      return raw
+        .replace(/\r\n/g, "\n")
+        .replace(/\s+\n/g, "\n")
+        .replace(/\n\s+/g, "\n")
+        .trim();
+    }
+
+    const node = document.createElement("div");
+    node.innerHTML = raw;
+    return String(node.textContent || "")
+      .replace(/\s+\n/g, "\n")
+      .replace(/\n\s+/g, "\n")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function templatePreviewText(template) {
+    return String(template?.subject || "").trim() || htmlToPlainText(template?.body);
+  }
+
+  function toEditorHtml(value) {
+    const raw = String(value || "");
+    if (!raw) return "";
+    if (/<[a-z][\s\S]*>/i.test(raw)) return raw;
+    return App.escapeHtml(raw).replace(/\n/g, "<br>");
+  }
+
+  function getTinyEmailBodyEditor() {
+    const tiny = window.tinymce;
+    if (!tiny || typeof tiny.get !== "function") return null;
+    return tiny.get(BODY_EDITOR_ID) || null;
+  }
+
+  function readEmailBodyValueFromForm() {
+    const editor = getTinyEmailBodyEditor();
+    if (editor) {
+      const text = String(editor.getContent({ format: "text" }) || "").trim();
+      if (!text) return "";
+      const html = String(editor.getContent({ format: "html" }) || "").trim();
+      return html;
+    }
+    return String(dom.emailTemplateBodyInput?.value || "").trim();
+  }
+
+  function writeEmailBodyValueToForm(value) {
+    const next = String(value || "");
+    const editor = getTinyEmailBodyEditor();
+    if (editor) {
+      const nextHtml = toEditorHtml(next);
+      const currentHtml = String(editor.getContent({ format: "html" }) || "").trim();
+      if (currentHtml !== nextHtml.trim()) {
+        editor.setContent(nextHtml);
+      }
+      return;
+    }
+    if (dom.emailTemplateBodyInput) {
+      dom.emailTemplateBodyInput.value = next;
+    }
+  }
+
+  function ensureEmailBodyEditor() {
+    if (tinyEditorUnavailable) return Promise.resolve(null);
+    const tiny = window.tinymce;
+    if (!tiny || typeof tiny.init !== "function") {
+      tinyEditorUnavailable = true;
+      App.setStatus("TinyMCE is unavailable. Falling back to plain text body editor.");
+      return Promise.resolve(null);
+    }
+
+    const existing = getTinyEmailBodyEditor();
+    if (existing) return Promise.resolve(existing);
+    if (emailBodyEditorInitPromise) return emailBodyEditorInitPromise;
+
+    emailBodyEditorInitPromise = tiny
+      .init({
+        selector: `#${BODY_EDITOR_ID}`,
+        license_key: "gpl",
+        menubar: false,
+        statusbar: false,
+        branding: false,
+        promotion: false,
+        resize: false,
+        toolbar:
+          "undo redo | blocks | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright | removeformat",
+        skin: "oxide",
+        content_css: "default",
+        setup(editor) {
+          editor.on("change input undo redo keyup", () => {
+            if (state.syncingEmailTemplateForm) return;
+            upsertActiveTemplateFromForm();
+          });
+        }
+      })
+      .then((editors) => {
+        const editor = Array.isArray(editors) ? editors[0] || null : null;
+        emailBodyEditorInitPromise = null;
+        return editor;
+      })
+      .catch(() => {
+        tinyEditorUnavailable = true;
+        emailBodyEditorInitPromise = null;
+        App.setStatus("Could not initialize TinyMCE. Falling back to plain text body editor.");
+        return null;
+      });
+
+    return emailBodyEditorInitPromise;
+  }
 
   function loadEmailTemplatesDraftFromSettings() {
     const normalized = App.normalizeEmailTemplates(state.settings.emailTemplates);
@@ -24,7 +139,7 @@
     dom.emailTemplatesListEl.innerHTML = state.emailTemplatesDraft
       .map((template) => {
         const activeClass = template.id === state.activeEmailTemplateId ? "active" : "";
-        const summary = String(template.subject || template.body || "").trim();
+        const summary = templatePreviewText(template);
         return `
         <button type='button' class='email-template-list-btn ${activeClass}' data-template-id='${App.escapeHtml(template.id)}'>
           <span class='email-template-list-name'>${App.escapeHtml(template.name || "Untitled")}</span>
@@ -46,7 +161,7 @@
     state.syncingEmailTemplateForm = true;
     if (dom.emailTemplateNameInput) dom.emailTemplateNameInput.value = active.name || "";
     if (dom.emailTemplateSubjectInput) dom.emailTemplateSubjectInput.value = active.subject || "";
-    if (dom.emailTemplateBodyInput) dom.emailTemplateBodyInput.value = active.body || "";
+    writeEmailBodyValueToForm(active.body || "");
     state.syncingEmailTemplateForm = false;
   }
 
@@ -62,7 +177,7 @@
 
     active.name = String(dom.emailTemplateNameInput?.value || "").trim() || "Untitled";
     active.subject = String(dom.emailTemplateSubjectInput?.value || "").trim();
-    active.body = String(dom.emailTemplateBodyInput?.value || "").trim();
+    active.body = readEmailBodyValueFromForm();
     renderEmailTemplatesList();
   }
 
@@ -99,7 +214,7 @@
 
     dom.emailTemplatePickList.innerHTML = templates
       .map((template) => {
-        const preview = String(template.subject || template.body || "").trim();
+        const preview = templatePreviewText(template);
         return `
         <button type='button' class='email-template-pick-item' data-template-id='${App.escapeHtml(template.id)}'>
           <span class='email-template-pick-name'>${App.escapeHtml(template.name || "Untitled")}</span>
@@ -143,9 +258,11 @@
     }
 
     const tokens = App.getContactTokenMap(contact);
+    const escapedHtmlTokens = Object.fromEntries(Object.entries(tokens).map(([tokenKey, tokenValue]) => [tokenKey, App.escapeHtml(tokenValue)]));
     const subject = App.applyTokens(template.subject, tokens).trim();
-    const body = App.applyTokens(template.body, tokens).trim();
-    if (!subject && !body) {
+    const bodyHtml = App.applyTokens(template.body, escapedHtmlTokens).trim();
+    const body = htmlToPlainText(bodyHtml);
+    if (!subject && !body && !bodyHtml) {
       App.setStatus(`Template "${template.name}" is empty.`);
       return;
     }
@@ -168,7 +285,8 @@
       const response = await chrome.tabs.sendMessage(tab.id, {
         type: MT.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE,
         subject,
-        body
+        body,
+        bodyHtml
       });
 
       if (!response?.ok) {
@@ -191,6 +309,7 @@
     upsertActiveTemplateFromForm,
     addEmailTemplateDraft,
     deleteActiveEmailTemplateDraft,
+    ensureEmailBodyEditor,
     renderEmailTemplatePickerOptions,
     openEmailTemplatePicker,
     closeEmailTemplatePicker,
