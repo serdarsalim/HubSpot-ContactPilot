@@ -35,6 +35,7 @@
       "js": [
         "shared/messages.js",
         "shared/config.js",
+        "vendor/darkreader/darkreader.js",
         "content.js"
       ],
       "run_at": "document_idle"

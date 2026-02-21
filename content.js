@@ -21,6 +21,65 @@
     emailComposerOpenAttempts: 20,
     emailComposerOpenDelayMs: 300
   });
+  const SETTINGS_KEY = "popupSettings";
+  const DARK_READER_THEME = Object.freeze({
+    brightness: 100,
+    contrast: 90,
+    sepia: 10
+  });
+
+  function normalizeThemeMode(value) {
+    return String(value || "").toLowerCase() === "dark" ? "dark" : "light";
+  }
+
+  function getDarkReaderApi() {
+    const api = globalThis.DarkReader;
+    if (!api) return null;
+    if (typeof api.enable !== "function" || typeof api.disable !== "function") return null;
+    return api;
+  }
+
+  function applyHubSpotThemeMode(themeMode) {
+    const mode = normalizeThemeMode(themeMode);
+    const darkReader = getDarkReaderApi();
+    if (!darkReader) return false;
+
+    if (mode === "dark") {
+      if (typeof darkReader.setFetchMethod === "function" && typeof globalThis.fetch === "function") {
+        darkReader.setFetchMethod(globalThis.fetch.bind(globalThis));
+      }
+      darkReader.enable(DARK_READER_THEME);
+      return true;
+    }
+
+    darkReader.disable();
+    return true;
+  }
+
+  function applyHubSpotThemeFromSettingsStorage() {
+    try {
+      chrome.storage.sync.get(SETTINGS_KEY, (result) => {
+        if (chrome.runtime.lastError) return;
+        const settings = result?.[SETTINGS_KEY];
+        applyHubSpotThemeMode(settings?.themeMode || "light");
+      });
+    } catch (_error) {
+      // Ignore storage read failures.
+    }
+  }
+
+  function subscribeHubSpotThemeChanges() {
+    try {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== "sync") return;
+        if (!changes || !Object.prototype.hasOwnProperty.call(changes, SETTINGS_KEY)) return;
+        const nextSettings = changes[SETTINGS_KEY]?.newValue;
+        applyHubSpotThemeMode(nextSettings?.themeMode || "light");
+      });
+    } catch (_error) {
+      // Ignore storage subscription failures.
+    }
+  }
 
   function cleanText(text) {
     return (text || "").replace(/\s+/g, " ").trim();
@@ -1096,6 +1155,9 @@
 
     await applyEmailTemplateOnPage(subject, body, bodyHtml);
   }
+
+  applyHubSpotThemeFromSettingsStorage();
+  subscribeHubSpotThemeChanges();
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !message.type) return;
