@@ -266,11 +266,9 @@
     dom.emailTemplatesListEl.innerHTML = state.emailTemplatesDraft
       .map((template) => {
         const activeClass = template.id === state.activeEmailTemplateId ? "active" : "";
-        const summary = templatePreviewText(template);
         return `
         <button type='button' class='email-template-list-btn ${activeClass}' data-template-id='${App.escapeHtml(template.id)}'>
           <span class='email-template-list-name'>${App.escapeHtml(template.name || "Untitled")}</span>
-          <span class='email-template-list-meta'>${App.escapeHtml(summary.slice(0, 52) || "No subject/body yet")}</span>
         </button>
       `;
       })

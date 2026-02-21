@@ -94,7 +94,7 @@
 
       .topbar h1 {
         margin: 0;
-        font-size: 20px;
+        font-size: 22px;
         color: var(--brand);
       }
 
@@ -706,6 +706,14 @@
         min-height: 0;
       }
 
+      .email-templates-shell,
+      .email-templates-shell input,
+      .email-templates-shell textarea,
+      .email-templates-shell button,
+      .email-templates-shell label {
+        font-family: "Avenir Next", "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      }
+
       .email-templates-sidebar,
       .email-template-editor-pane {
         border: 1px solid var(--line);
@@ -726,13 +734,6 @@
         gap: 10px;
         padding: 12px;
         border-bottom: 1px solid #e6edf5;
-      }
-
-      .email-templates-sidebar-title {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 700;
-        color: #2d435b;
       }
 
       .email-add-template-btn {
@@ -778,13 +779,6 @@
 
       .email-template-list-btn.active .email-template-list-name {
         color: var(--brand);
-      }
-
-      .email-template-list-meta {
-        display: block;
-        margin-top: 3px;
-        font-size: 12px;
-        color: var(--muted);
       }
 
       .email-template-editor-pane {
@@ -1000,7 +994,6 @@
       <div class="email-templates-shell">
         <aside class="email-templates-sidebar">
           <div class="email-templates-sidebar-head">
-            <h3 class="email-templates-sidebar-title">Templates</h3>
             <button id="addEmailTemplateBtn" class="btn primary email-add-template-btn" type="button">Add Template</button>
           </div>
           <div id="emailTemplatesList" class="email-templates-list"></div>
