@@ -2,8 +2,8 @@
   const App = window.PopupApp;
   const { dom, state } = App;
 
-  dom.settingsBtn.addEventListener("click", App.openSettings);
-  if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.closeEmailSettings);
+  dom.settingsBtn.addEventListener("click", App.toggleSettings);
+  if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.openContactsView);
   if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.toggleEmailSettings);
   dom.cancelSettingsBtn.addEventListener("click", App.closeSettings);
   dom.saveSettingsBtn.addEventListener("click", App.saveSettings);
@@ -25,9 +25,9 @@
     });
   }
 
-  dom.settingsOverlay.addEventListener("click", (event) => {
-    if (event.target === dom.settingsOverlay) App.closeSettings();
-  });
+  if (dom.exportTemplatesBtn) dom.exportTemplatesBtn.addEventListener("click", App.exportPersonalTemplates);
+  if (dom.importTemplatesBtn) dom.importTemplatesBtn.addEventListener("click", App.triggerImportTemplatesPicker);
+  if (dom.importTemplatesInput) dom.importTemplatesInput.addEventListener("change", (event) => void App.onImportTemplatesInputChange(event));
 
   if (dom.emailTemplatePickOverlay) {
     dom.emailTemplatePickOverlay.addEventListener("click", (event) => {
@@ -35,7 +35,15 @@
     });
   }
 
+  if (dom.templateImportOverlay) {
+    dom.templateImportOverlay.addEventListener("click", (event) => {
+      if (event.target === dom.templateImportOverlay) App.closeTemplateImportReview();
+    });
+  }
+
   if (dom.cancelEmailTemplatePickBtn) dom.cancelEmailTemplatePickBtn.addEventListener("click", App.closeEmailTemplatePicker);
+  if (dom.cancelTemplateImportBtn) dom.cancelTemplateImportBtn.addEventListener("click", App.closeTemplateImportReview);
+  if (dom.applyTemplateImportBtn) dom.applyTemplateImportBtn.addEventListener("click", () => void App.applyTemplateImport());
 
   if (dom.emailTemplatePickList) {
     dom.emailTemplatePickList.addEventListener("click", (event) => {

@@ -484,18 +484,16 @@
         color: #334e68;
       }
 
-      .settings-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(13, 25, 38, 0.45);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
+      .settings-page {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        flex: 1;
+        min-height: 0;
       }
 
-      .settings-overlay.open {
-        display: flex;
+      .settings-page[hidden] {
+        display: none;
       }
 
       .notes-overlay {
@@ -526,8 +524,34 @@
         display: flex;
       }
 
+      .template-import-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(13, 25, 38, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1070;
+      }
+
+      .template-import-overlay.open {
+        display: flex;
+      }
+
       .settings-card {
-        width: 440px;
+        width: 100%;
+        max-width: none;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 8px 20px rgba(8, 30, 60, 0.08);
+        overflow-y: auto;
+      }
+
+      .template-import-card {
+        width: 640px;
+        max-width: calc(100vw - 32px);
         background: var(--card);
         border: 1px solid var(--line);
         border-radius: 14px;
@@ -649,8 +673,85 @@
 
       .checks {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
+      }
+
+      .template-data-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .template-import-summary {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: #39526c;
+      }
+
+      .template-import-mode-row {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 13px;
+        color: #2f465f;
+      }
+
+      .template-import-mode-row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        cursor: pointer;
+      }
+
+      .template-import-list {
+        max-height: 280px;
+        overflow-y: auto;
+        border: 1px solid #d9e5f2;
+        border-radius: 10px;
+        padding: 8px;
+        background: #f8fbff;
+      }
+
+      .template-import-item {
+        display: block;
+        border: 1px solid #e2ebf5;
+        background: #fff;
+        border-radius: 9px;
+        padding: 8px;
+        font-size: 13px;
+        color: #233a52;
+        margin-bottom: 8px;
+      }
+
+      .template-import-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .template-import-item-title {
+        display: block;
+        font-weight: 600;
+      }
+
+      .template-import-item-meta {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: #5a6f85;
+      }
+
+      @media (max-width: 920px) {
+        .checks {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 620px) {
+        .checks {
+          grid-template-columns: 1fr;
+        }
       }
 
       .check {
@@ -1022,7 +1123,7 @@
       </div>
     </section>
 
-    <div id="settingsOverlay" class="settings-overlay">
+    <section id="settingsPage" class="settings-page" hidden>
       <div class="settings-card">
         <div class="settings-head">
           <h2>Settings</h2>
@@ -1053,12 +1154,21 @@
           <div id="columnChecks" class="checks"></div>
         </div>
 
+        <div class="field">
+          <label>Template Data</label>
+          <div class="template-data-actions">
+            <button id="exportTemplatesBtn" class="btn" type="button">Export Personal Templates</button>
+            <button id="importTemplatesBtn" class="btn" type="button">Import Personal Templates</button>
+          </div>
+          <input id="importTemplatesInput" type="file" accept="application/json,.json" hidden />
+        </div>
+
         <div class="settings-actions">
-          <button id="cancelSettingsBtn" class="btn">Cancel</button>
+          <button id="cancelSettingsBtn" class="btn">Back</button>
           <button id="saveSettingsBtn" class="btn primary">Save</button>
         </div>
       </div>
-    </div>
+    </section>
 
     <div id="notesOverlay" class="notes-overlay">
       <div class="notes-card">
@@ -1090,6 +1200,24 @@
         <div id="emailTemplatePickList" class="email-template-pick-list"></div>
         <div class="settings-actions">
           <button id="cancelEmailTemplatePickBtn" class="btn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="templateImportOverlay" class="template-import-overlay">
+      <div class="template-import-card">
+        <div class="settings-head">
+          <h2>Import Personal Templates</h2>
+        </div>
+        <p id="templateImportSummary" class="template-import-summary"></p>
+        <div class="template-import-mode-row">
+          <label><input id="templateImportModeAdd" type="radio" name="templateImportMode" value="add" checked /> Add as new</label>
+          <label><input id="templateImportModeReplace" type="radio" name="templateImportMode" value="replace" /> Replace matching names</label>
+        </div>
+        <div id="templateImportList" class="template-import-list"></div>
+        <div class="settings-actions">
+          <button id="cancelTemplateImportBtn" class="btn" type="button">Cancel</button>
+          <button id="applyTemplateImportBtn" class="btn primary" type="button">Import Selected</button>
         </div>
       </div>
     </div>
