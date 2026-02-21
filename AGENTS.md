@@ -19,7 +19,10 @@ Main domain scope is `https://app.hubspot.com/*`.
 - `manifest.json`
   - MV3 extension config
   - Permissions: `storage`, `tabs`
-  - Content script on HubSpot pages: `content.js`
+  - Content scripts on HubSpot pages (load order matters):
+    1. `shared/messages.js` (message contract constants)
+    2. `shared/config.js` (timing/retry constants)
+    3. `content.js` (HubSpot DOM extraction/automation)
   - Background service worker: `background.js`
 
 - `background.js`
@@ -28,16 +31,62 @@ Main domain scope is `https://app.hubspot.com/*`.
 
 - `popup.html`
   - Entire UI (contacts page + settings modal + notes modal + email templates page + template picker overlay)
+  - Loads shared and popup modules in this order:
+    1. `shared/messages.js`
+    2. `shared/config.js`
+    3. `popup/core.js`
+    4. `popup/hubspotApi.js`
+    5. `popup/settings.js`
+    6. `popup/emailTemplates.js`
+    7. `popup/notesFlow.js`
+    8. `popup/contactsView.js`
+    9. `popup/exportUtils.js`
+    10. `popup.js` (bootstrap/events only)
 
 - `popup.js`
-  - Main app logic/state
-  - Talks to active HubSpot tab via `chrome.tabs.sendMessage(...)`
-  - Handles settings persistence in `chrome.storage.sync`
+  - Thin bootstrap/event wiring only
+  - Runs startup init: load settings -> load contacts -> adjust sticky layout
+
+- `popup/core.js`
+  - Shared popup app container (`window.PopupApp`)
+  - DOM references, constants, in-memory state, common helpers
+  - Exposes shared contracts/timing (`App.messageTypes`, `App.timing`)
+
+- `popup/hubspotApi.js`
+  - HubSpot tab discovery and portal detection
+  - Message send/retry wrappers for notes and portal ID
+  - Temporary contact-tab helper for note read/create flows
+
+- `popup/settings.js`
+  - Settings form render/load/save (`chrome.storage.sync`)
+  - Email templates page open/close/save orchestration
+
+- `popup/emailTemplates.js`
+  - Template draft CRUD/editor rendering
+  - Template picker overlay
+  - Contact email open/apply flow
+
+- `popup/notesFlow.js`
+  - Notes modal rendering/loading/saving flow
+
+- `popup/contactsView.js`
+  - Contact table render/sort/select/actions
+  - Calls `GET_CONTACTS` and portal ID retrieval
+  - Deduplicates loaded contacts by Record ID before rendering
+
+- `popup/exportUtils.js`
+  - CSV/VCF export helpers and copy-email action
 
 - `content.js`
   - Runs inside HubSpot pages
   - Extracts table data
   - Automates note and email composer interactions by DOM heuristics
+
+- `shared/messages.js`
+  - Canonical message type constants shared by popup/content
+
+- `shared/config.js`
+  - Canonical timing/retry constants shared by popup/content
 
 ## Message Contracts (Popup -> Content)
 
@@ -66,7 +115,11 @@ Implemented message types:
   - Input: `subject`, `body`
   - Tries to open email composer on contact page and then fill subject/body
 
-If you add/rename messages, update both `popup.js` and `content.js`.
+Source of truth:
+
+- Define/rename types in `shared/messages.js`
+- Consume in popup modules via `App.messageTypes`
+- Consume in content script via `globalThis.ContactPilotShared.MESSAGE_TYPES`
 
 ## Settings Schema (`SETTINGS_KEY = "popupSettings"`)
 
@@ -83,6 +136,11 @@ Legacy cleanup currently handled:
 
 - `noteTemplate === "Reached out on WhatsApp"` -> cleared
 - old `defaultEmailTemplateId` is ignored/stripped if present
+
+Persistence behavior notes:
+
+- Column visibility defaults are merged at runtime from detected columns.
+- `chrome.storage.sync.set` on contacts load only happens when that merge introduces new column keys.
 
 ## UI Structure (Current)
 
@@ -114,7 +172,8 @@ Legacy cleanup currently handled:
 1. Popup finds most recent HubSpot tab.
 2. Sends `GET_CONTACTS`.
 3. Content script finds header/rows heuristically, normalizes values.
-4. Popup renders contacts + actions.
+4. Popup deduplicates contacts by Record ID (if Record ID column exists).
+5. Popup renders contacts + actions.
 
 ### Row Email Flow
 
@@ -141,11 +200,25 @@ Legacy cleanup currently handled:
 
 When fixing, prefer scoring heuristics over brittle class selectors.
 
+Timing/retry tuning:
+
+- Do not hardcode new magic delays in popup/content modules.
+- Update shared timing config in `shared/config.js` and consume via existing helpers.
+
 ## Local Verification
 
 No formal test suite exists. Use:
 
+- `node --check shared/messages.js`
+- `node --check shared/config.js`
 - `node --check popup.js`
+- `node --check popup/core.js`
+- `node --check popup/hubspotApi.js`
+- `node --check popup/settings.js`
+- `node --check popup/emailTemplates.js`
+- `node --check popup/notesFlow.js`
+- `node --check popup/contactsView.js`
+- `node --check popup/exportUtils.js`
 - `node --check content.js`
 
 Manual smoke test:
@@ -173,6 +246,8 @@ Manual smoke test:
   - `background.js`
   - `popup.html`
   - `popup.js`
+  - `popup/` (modular popup logic)
+  - `shared/` (shared contracts/config)
   - `content.js`
 - Ignore macOS metadata:
   - `.DS_Store` (via `.gitignore`)
