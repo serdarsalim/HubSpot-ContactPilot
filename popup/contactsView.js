@@ -34,6 +34,22 @@
     return deduped;
   }
 
+  function countNewContacts(contacts) {
+    const possibilityColumn = App.findPossibilityColumn();
+    if (!possibilityColumn) return 0;
+    return contacts.reduce((count, contact) => {
+      const value = String(contact?.values?.[possibilityColumn.id] || "").trim();
+      return count + (value === "--" ? 1 : 0);
+    }, 0);
+  }
+
+  function setContactsStatus(filteredContacts) {
+    const total = Array.isArray(filteredContacts) ? filteredContacts.length : 0;
+    const selected = state.selectedKeys.size;
+    const newCount = countNewContacts(filteredContacts || []);
+    App.setStatus(`Found ${total} contact(s). Selected ${selected}. ${newCount} new.`);
+  }
+
   function renderContacts() {
     dom.listEl.innerHTML = "";
     const filteredContacts = App.getFilteredContacts();
@@ -52,13 +68,13 @@
 
     const visibleColumns = App.getVisibleColumns();
     if (!visibleColumns.length) {
-      App.setStatus(`Found ${filteredContacts.length} contact(s). Selected ${state.selectedKeys.size}.`);
+      setContactsStatus(filteredContacts);
       dom.listEl.innerHTML = "<div class='status'>Enable at least one column in Settings.</div>";
       return;
     }
 
     state.displayedContacts = App.getSortedContacts(filteredContacts);
-    App.setStatus(`Found ${filteredContacts.length} contact(s). Selected ${state.selectedKeys.size}.`);
+    setContactsStatus(filteredContacts);
 
     const allShownSelected =
       state.displayedContacts.length > 0 && state.displayedContacts.every((c) => state.selectedKeys.has(App.contactKey(c)));
@@ -157,7 +173,7 @@
         if (input.checked) state.selectedKeys.add(key);
         else state.selectedKeys.delete(key);
         App.updateExportActionsVisibility();
-        App.setStatus(`Found ${filteredContacts.length} contact(s). Selected ${state.selectedKeys.size}.`);
+        setContactsStatus(filteredContacts);
       });
     });
 
