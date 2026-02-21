@@ -738,45 +738,68 @@
     }
   }
 
-  function findBodyEditor(dialog) {
-    const candidates = Array.from(dialog.querySelectorAll("[contenteditable='true'], textarea, [role='textbox'], iframe")).filter((el) =>
-      isVisible(el)
-    );
-    if (!candidates.length) return null;
+  function scoreBodyEditorCandidate(el) {
+    const hint = getElementHint(el);
+    const tag = String(el.tagName || "").toLowerCase();
+    const classText = cleanText(
+      `${el.className || ""} ${el.getAttribute?.("data-slate-editor") || ""} ${el.getAttribute?.("data-editor") || ""}`
+    ).toLowerCase();
 
-    let best = null;
-    let bestScore = -Infinity;
-    for (const el of candidates) {
-      const hint = getElementHint(el);
-      const tag = String(el.tagName || "").toLowerCase();
+    let score = 0;
+    if (hint.includes("message") || hint.includes("body") || hint.includes("email") || hint.includes("content")) score += 12;
+    if (hint.includes("rich text") || hint.includes("editor")) score += 8;
+    if (hint.includes("subject")) score -= 20;
+    if (isRecipientFieldHint(hint)) score -= 24;
+    if (hint.includes("search")) score -= 14;
+    if (el.closest("[role='toolbar']")) score -= 16;
+    if (classText.includes("prosemirror")) score += 18;
+    if (classText.includes("ql-editor")) score += 16;
+    if (classText.includes("slate")) score += 12;
 
-      let score = 0;
-      if (hint.includes("message") || hint.includes("body") || hint.includes("email") || hint.includes("content")) score += 12;
-      if (hint.includes("rich text") || hint.includes("editor")) score += 8;
-      if (hint.includes("subject")) score -= 20;
-      if (isRecipientFieldHint(hint)) score -= 24;
-      if (hint.includes("search")) score -= 14;
-      if (el.closest("[role='toolbar']")) score -= 16;
+    if (tag === "iframe") {
+      if (getIframeEditorElement(el)) score += 12;
+      else score -= 12;
+    } else {
+      if (el.getAttribute("contenteditable") === "true") score += 8;
+      if (tag === "textarea") score += 4;
+      if (tag === "div") score += 2;
+    }
 
-      if (tag === "iframe") {
-        if (getIframeEditorElement(el)) score += 12;
-        else score -= 12;
-      } else {
-        if (el.getAttribute("contenteditable") === "true") score += 8;
-        if (tag === "textarea") score += 4;
-      }
+    const rect = el.getBoundingClientRect();
+    if (rect.height >= 120) score += 8;
+    if (rect.width >= 280) score += 2;
+    return score;
+  }
 
-      const rect = el.getBoundingClientRect();
-      if (rect.height >= 120) score += 8;
-      if (rect.width >= 280) score += 2;
+  function getBodyEditorCandidates(dialog) {
+    const selector = "[contenteditable='true'], textarea, [role='textbox'], iframe, [data-slate-editor='true'], .ProseMirror, .ql-editor";
+    const roots = [dialog, document].filter(Boolean);
+    const seen = new Set();
+    const candidates = [];
 
-      if (score > bestScore) {
-        bestScore = score;
-        best = el;
+    for (const root of roots) {
+      const nodes = Array.from(root.querySelectorAll(selector)).filter((el) => isVisible(el));
+      for (const node of nodes) {
+        if (!(node instanceof Element)) continue;
+        if (seen.has(node)) continue;
+        seen.add(node);
+        candidates.push(node);
       }
     }
 
-    return bestScore >= 8 ? best : null;
+    if (!candidates.length) return [];
+
+    return candidates
+      .map((el) => ({ el, score: scoreBodyEditorCandidate(el) }))
+      .sort((a, b) => b.score - a.score)
+      .filter((item) => item.score >= 8)
+      .map((item) => item.el);
+  }
+
+  function findBodyEditor(dialog) {
+    const candidates = getBodyEditorCandidates(dialog);
+    if (!candidates?.length) return null;
+    return candidates[0] || null;
   }
 
   function setInputValue(input, value) {
@@ -801,7 +824,13 @@
     if (!element) return;
     const ownerWin = element.ownerDocument?.defaultView || window;
     const EventCtor = ownerWin.Event || Event;
-    element.dispatchEvent(new EventCtor("input", { bubbles: true }));
+    const InputEventCtor = ownerWin.InputEvent;
+    if (typeof InputEventCtor === "function") {
+      element.dispatchEvent(new InputEventCtor("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" }));
+      element.dispatchEvent(new InputEventCtor("input", { bubbles: true, inputType: "insertText" }));
+    } else {
+      element.dispatchEvent(new EventCtor("input", { bubbles: true }));
+    }
     element.dispatchEvent(new EventCtor("change", { bubbles: true }));
   }
 
@@ -830,34 +859,154 @@
     return template.innerHTML.trim();
   }
 
-  function prependEditorHtml(editor, html) {
-    const value = sanitizeEditorHtml(html);
-    if (!value) return false;
-    const target = editor instanceof HTMLIFrameElement ? getIframeEditorElement(editor) : editor;
-    if (!target) return false;
-    target.focus();
+  function toInsertableHtml(value) {
+    const cleaned = sanitizeEditorHtml(value);
+    if (!cleaned) return "";
+    if (!/<[a-z][\s\S]*>/i.test(cleaned)) {
+      return escapeHtml(cleaned).replace(/\r\n/g, "\n").replace(/\n/g, "<br>");
+    }
+    return cleaned;
+  }
 
-    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
-      const textValue = htmlToPlainText(value);
-      if (!textValue) return false;
-      const current = String(target.value || "");
-      target.value = current ? `${textValue}\n\n${current}` : textValue;
+  function resolveEditorTarget(editor) {
+    if (editor instanceof HTMLIFrameElement) return getIframeEditorElement(editor);
+    if (!(editor instanceof Element)) return null;
+    if (editor.matches("textarea, input") || editor.getAttribute("contenteditable") === "true") return editor;
+
+    const nestedEditable = editor.querySelector("[contenteditable='true'], textarea, input, [role='textbox']");
+    if (nestedEditable instanceof Element) return nestedEditable;
+    return editor;
+  }
+
+  function findProseMirrorView(target) {
+    if (!(target instanceof Element)) return null;
+    const roots = [target, target.closest("[class*='ProseMirror']"), ...Array.from(document.querySelectorAll("[class*='ProseMirror']"))].filter(
+      Boolean
+    );
+
+    for (const root of roots) {
+      let node = root;
+      while (node && node instanceof Element) {
+        const direct = node.pmViewDesc?.view || node.__prosemirrorView || null;
+        if (direct && typeof direct.dispatch === "function") return direct;
+        node = node.parentElement;
+      }
+    }
+    return null;
+  }
+
+  function tryProseMirrorInsert(target, text, html = "") {
+    const value = String(text || htmlToPlainText(html) || "").trim();
+    if (!value) return false;
+    const view = findProseMirrorView(target);
+    if (!view || !view.state?.tr || typeof view.dispatch !== "function") return false;
+
+    try {
+      if (typeof view.focus === "function") view.focus();
+      const baseTr = view.state.tr;
+      const from = Number(baseTr.selection?.from) || 1;
+      const to = Number(baseTr.selection?.to) || from;
+      const nextTr = baseTr.insertText(`${value}\n\n`, from, to);
+      view.dispatch(nextTr.scrollIntoView());
+
+      const docText = String(view.state?.doc?.textBetween?.(0, view.state.doc.content.size, "\n", "\n") || "");
+      return docText.includes(value.slice(0, Math.min(24, value.length)));
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function prependInContentEditable(target, insertHtml, textFallback) {
+    if (!target) return false;
+    if (tryProseMirrorInsert(target, textFallback || htmlToPlainText(insertHtml), insertHtml)) {
       dispatchInputLikeEvents(target);
       return true;
     }
 
-    const currentHtml = String(target.innerHTML || "");
-    target.innerHTML = currentHtml ? `${value}<p><br></p>${currentHtml}` : value;
+    if (!target.isContentEditable) {
+      return false;
+    }
+    const ownerDoc = target.ownerDocument || document;
+    const ownerWin = ownerDoc.defaultView || window;
+    const before = cleanText(target.textContent || "");
+
+    target.focus();
+
+    const selection = ownerWin.getSelection?.();
+    if (selection) {
+      if (!selection.anchorNode || !target.contains(selection.anchorNode)) {
+        const range = ownerDoc.createRange();
+        range.selectNodeContents(target);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+
+    let applied = false;
+    if (insertHtml && typeof ownerDoc.execCommand === "function") {
+      applied = ownerDoc.execCommand("insertHTML", false, `${insertHtml}<p><br></p>`);
+    }
+    if (!applied && textFallback && typeof ownerDoc.execCommand === "function") {
+      applied = ownerDoc.execCommand("insertText", false, `${textFallback}\n\n`);
+    }
+    if (!applied) {
+      const currentHtml = String(target.innerHTML || "");
+      target.innerHTML = currentHtml ? `${insertHtml || escapeHtml(textFallback)}<p><br></p>${currentHtml}` : insertHtml || escapeHtml(textFallback);
+    }
+
+    const after = cleanText(target.textContent || "");
     dispatchInputLikeEvents(target);
-    return true;
+    return after.length > before.length;
+  }
+
+  function activateBodyEditor(dialog) {
+    const selector = "[class*='ProseMirror'], [data-slate-editor='true'], [role='textbox'], textarea, iframe";
+    const elements = Array.from(dialog.querySelectorAll(selector)).filter((el) => isVisible(el));
+    if (!elements.length) return false;
+
+    const sorted = elements
+      .map((el) => ({ el, score: scoreBodyEditorCandidate(el) }))
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.el);
+
+    let clicked = false;
+    for (const el of sorted.slice(0, 5)) {
+      try {
+        el.focus?.();
+        el.click?.();
+        clicked = true;
+      } catch (_error) {
+        // Keep trying.
+      }
+    }
+    return clicked;
+  }
+
+  function prependEditorHtml(editor, html) {
+    const value = toInsertableHtml(html);
+    if (!value) return false;
+    const target = resolveEditorTarget(editor);
+    if (!target) return false;
+    const plain = htmlToPlainText(value);
+
+    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+      if (!plain) return false;
+      const current = String(target.value || "");
+      target.value = current ? `${plain}\n\n${current}` : plain;
+      dispatchInputLikeEvents(target);
+      return true;
+    }
+
+    if (prependInContentEditable(target, value, plain)) return true;
+    return false;
   }
 
   function prependEditorText(editor, text) {
     const value = String(text || "").trim();
     if (!value) return false;
-    const target = editor instanceof HTMLIFrameElement ? getIframeEditorElement(editor) : editor;
+    const target = resolveEditorTarget(editor);
     if (!target) return false;
-    target.focus();
 
     if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
       const current = String(target.value || "");
@@ -867,10 +1016,8 @@
     }
 
     const escaped = escapeHtml(value).replace(/\r\n/g, "\n").replace(/\n/g, "<br>");
-    const currentHtml = String(target.innerHTML || "");
-    target.innerHTML = currentHtml ? `${escaped}<p><br></p>${currentHtml}` : escaped;
-    dispatchInputLikeEvents(target);
-    return true;
+    if (prependInContentEditable(target, escaped, value)) return true;
+    return false;
   }
 
   async function applyEmailTemplateOnPage(subject, body, bodyHtml = "") {
@@ -891,14 +1038,35 @@
     const bodyText = String(body || "").trim();
     const bodyRichHtml = String(bodyHtml || "").trim();
     if (bodyText || bodyRichHtml) {
-      const bodyEditor = findBodyEditor(dialog);
-      if (!bodyEditor) {
-        throw new Error("Could not find the email body editor.");
+      let bodyApplied = false;
+      for (let attempt = 0; attempt < 6 && !bodyApplied; attempt += 1) {
+        const bodyEditors = getBodyEditorCandidates(dialog);
+        for (const bodyEditor of bodyEditors) {
+          const appliedHtml = bodyRichHtml ? prependEditorHtml(bodyEditor, bodyRichHtml) : false;
+          if (appliedHtml) {
+            bodyApplied = true;
+            break;
+          }
+          if (bodyText && prependEditorText(bodyEditor, bodyText)) {
+            bodyApplied = true;
+            break;
+          }
+        }
+        if (bodyApplied) break;
+
+        activateBodyEditor(dialog);
+        await sleep(180);
+        if (attempt === 2) {
+          const fallbackEditor = findBodyEditor(dialog);
+          if (fallbackEditor && bodyText && prependEditorText(fallbackEditor, bodyText)) {
+            bodyApplied = true;
+            break;
+          }
+        }
       }
 
-      const appliedHtml = bodyRichHtml ? prependEditorHtml(bodyEditor, bodyRichHtml) : false;
-      if (!appliedHtml && bodyText) {
-        prependEditorText(bodyEditor, bodyText);
+      if (!bodyApplied) {
+        throw new Error("Could not write content into the email body field.");
       }
     }
   }
