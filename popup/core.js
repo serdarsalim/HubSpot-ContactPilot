@@ -1,5 +1,34 @@
 (() => {
   const App = (window.PopupApp = window.PopupApp || {});
+  const shared = globalThis.ContactPilotShared || {};
+  const MESSAGE_TYPES = shared.MESSAGE_TYPES || Object.freeze({
+    GET_CONTACTS: "GET_CONTACTS",
+    GET_PORTAL_ID: "GET_PORTAL_ID",
+    CREATE_NOTE_ON_PAGE: "CREATE_NOTE_ON_PAGE",
+    GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
+    APPLY_EMAIL_TEMPLATE_ON_PAGE: "APPLY_EMAIL_TEMPLATE_ON_PAGE",
+    OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE"
+  });
+  const TIMING = shared.TIMING || Object.freeze({
+    popup: Object.freeze({
+      waitForTabCompleteTimeoutMs: 30000,
+      messageRetryAttempts: 5,
+      messageRetryDelayMs: 700,
+      contactTabPostLoadDelayMs: 1200,
+      emailComposerReadyDelayMs: 900
+    }),
+    content: Object.freeze({
+      tableScrollDelayMs: 240,
+      noteComposerOpenAttempts: 20,
+      noteComposerOpenDelayMs: 400,
+      noteEditorSettleDelayMs: 250,
+      noteSaveSettleDelayMs: 1200,
+      noteReadRetryAttempts: 14,
+      noteReadRetryDelayMs: 450,
+      emailComposerOpenAttempts: 20,
+      emailComposerOpenDelayMs: 300
+    })
+  });
 
   const dom = {
     statusEl: document.getElementById("status"),
@@ -220,11 +249,14 @@
   }
 
   function mergeColumnSettings() {
+    let changed = false;
     for (const col of state.currentColumns) {
       if (typeof state.settings.visibleColumns[col.id] !== "boolean") {
         state.settings.visibleColumns[col.id] = true;
+        changed = true;
       }
     }
+    return changed;
   }
 
   function getSortedContacts(source) {
@@ -349,6 +381,8 @@
     DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_SETTINGS
   };
+  App.messageTypes = MESSAGE_TYPES;
+  App.timing = TIMING;
   App.state = state;
 
   Object.assign(App, {

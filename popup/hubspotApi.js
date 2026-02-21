@@ -1,5 +1,7 @@
 (() => {
   const App = window.PopupApp;
+  const MT = App.messageTypes;
+  const timing = App.timing.popup;
 
   async function findHubSpotTab() {
     const tabs = await chrome.tabs.query({ url: ["https://app.hubspot.com/*"] });
@@ -23,7 +25,7 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function waitForTabComplete(tabId, timeoutMs = 30000) {
+  async function waitForTabComplete(tabId, timeoutMs = timing.waitForTabCompleteTimeoutMs) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(handleUpdated);
@@ -48,7 +50,7 @@
 
     if (!hubSpotTab || typeof hubSpotTab.id !== "number") return "";
     try {
-      const response = await chrome.tabs.sendMessage(hubSpotTab.id, { type: "GET_PORTAL_ID" });
+      const response = await chrome.tabs.sendMessage(hubSpotTab.id, { type: MT.GET_PORTAL_ID });
       return String(response?.portalId || "");
     } catch (_error) {
       return "";
@@ -57,10 +59,10 @@
 
   async function sendCreateNoteMessage(tabId, noteBody) {
     let lastError = "";
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < timing.messageRetryAttempts; attempt += 1) {
       try {
         const response = await chrome.tabs.sendMessage(tabId, {
-          type: "CREATE_NOTE_ON_PAGE",
+          type: MT.CREATE_NOTE_ON_PAGE,
           noteBody
         });
         if (response?.ok) return response;
@@ -68,7 +70,7 @@
       } catch (error) {
         lastError = String(error);
       }
-      await sleep(700);
+      await sleep(timing.messageRetryDelayMs);
     }
 
     throw new Error(lastError || "Could not reach note automation on HubSpot tab.");
@@ -76,10 +78,10 @@
 
   async function sendGetNotesMessage(tabId) {
     let lastError = "";
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < timing.messageRetryAttempts; attempt += 1) {
       try {
         const response = await chrome.tabs.sendMessage(tabId, {
-          type: "GET_NOTES_ON_PAGE",
+          type: MT.GET_NOTES_ON_PAGE,
           limit: 25
         });
         if (response?.ok) return response;
@@ -87,7 +89,7 @@
       } catch (error) {
         lastError = String(error);
       }
-      await sleep(700);
+      await sleep(timing.messageRetryDelayMs);
     }
 
     throw new Error(lastError || "Could not read notes from HubSpot tab.");
@@ -107,7 +109,7 @@
 
     try {
       await waitForTabComplete(tab.id);
-      await sleep(1200);
+      await sleep(timing.contactTabPostLoadDelayMs);
       return await work(tab.id);
     } finally {
       try {

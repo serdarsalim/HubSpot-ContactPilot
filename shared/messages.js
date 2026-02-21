@@ -1,0 +1,12 @@
+(() => {
+  const shared = (globalThis.ContactPilotShared = globalThis.ContactPilotShared || {});
+
+  shared.MESSAGE_TYPES = Object.freeze({
+    GET_CONTACTS: "GET_CONTACTS",
+    GET_PORTAL_ID: "GET_PORTAL_ID",
+    CREATE_NOTE_ON_PAGE: "CREATE_NOTE_ON_PAGE",
+    GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
+    APPLY_EMAIL_TEMPLATE_ON_PAGE: "APPLY_EMAIL_TEMPLATE_ON_PAGE",
+    OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE"
+  });
+})();

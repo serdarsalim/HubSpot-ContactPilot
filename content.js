@@ -1,6 +1,26 @@
 (() => {
   const DEFAULT_COUNTRY_CODE = "60";
   const PHONE_PATTERN = /(?:\+?\d[\d\s().-]{6,}\d)/;
+  const shared = globalThis.ContactPilotShared || {};
+  const MESSAGE_TYPES = shared.MESSAGE_TYPES || Object.freeze({
+    GET_CONTACTS: "GET_CONTACTS",
+    GET_PORTAL_ID: "GET_PORTAL_ID",
+    CREATE_NOTE_ON_PAGE: "CREATE_NOTE_ON_PAGE",
+    GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
+    APPLY_EMAIL_TEMPLATE_ON_PAGE: "APPLY_EMAIL_TEMPLATE_ON_PAGE",
+    OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE"
+  });
+  const TIMING = shared.TIMING?.content || Object.freeze({
+    tableScrollDelayMs: 240,
+    noteComposerOpenAttempts: 20,
+    noteComposerOpenDelayMs: 400,
+    noteEditorSettleDelayMs: 250,
+    noteSaveSettleDelayMs: 1200,
+    noteReadRetryAttempts: 14,
+    noteReadRetryDelayMs: 450,
+    emailComposerOpenAttempts: 20,
+    emailComposerOpenDelayMs: 300
+  });
 
   function cleanText(text) {
     return (text || "").replace(/\s+/g, " ").trim();
@@ -261,7 +281,7 @@
 
     try {
       scroller.scrollTop = 0;
-      await sleep(240);
+      await sleep(TIMING.tableScrollDelayMs);
       collectSnapshot();
 
       let stableBottomRounds = 0;
@@ -274,7 +294,7 @@
         const nextTop = Math.min(maxTop, scroller.scrollTop + step);
         scroller.scrollTop = nextTop;
 
-        await sleep(240);
+        await sleep(TIMING.tableScrollDelayMs);
         collectSnapshot();
 
         const newMaxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
@@ -295,7 +315,7 @@
       }
 
       scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      await sleep(240);
+      await sleep(TIMING.tableScrollDelayMs);
       collectSnapshot();
     } finally {
       scroller.scrollTop = startTop;
@@ -447,11 +467,11 @@
     if (!text) throw new Error("Note text is empty.");
 
     let editor = null;
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < TIMING.noteComposerOpenAttempts; i += 1) {
       editor = findNoteEditor();
       if (editor) break;
       clickNoteTrigger();
-      await sleep(400);
+      await sleep(TIMING.noteComposerOpenDelayMs);
     }
 
     if (!editor) {
@@ -459,7 +479,7 @@
     }
 
     setEditorText(editor, text);
-    await sleep(250);
+    await sleep(TIMING.noteEditorSettleDelayMs);
 
     const saveButton = findSaveButton(editor);
     if (!saveButton) {
@@ -467,7 +487,7 @@
     }
 
     saveButton.click();
-    await sleep(1200);
+    await sleep(TIMING.noteSaveSettleDelayMs);
     return { ok: true };
   }
 
@@ -554,10 +574,10 @@
   }
 
   async function getNotesOnPage(limit = 25) {
-    for (let i = 0; i < 14; i += 1) {
+    for (let i = 0; i < TIMING.noteReadRetryAttempts; i += 1) {
       const notes = getNotesFromPage(limit);
       if (notes.length) return notes;
-      await sleep(450);
+      await sleep(TIMING.noteReadRetryDelayMs);
     }
     return [];
   }
@@ -726,11 +746,11 @@
   }
 
   async function openEmailAndApplyTemplateOnPage(subject, body) {
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < TIMING.emailComposerOpenAttempts; i += 1) {
       const existing = findOpenEmailDialog();
       if (existing) break;
       clickEmailComposerTrigger();
-      await sleep(300);
+      await sleep(TIMING.emailComposerOpenDelayMs);
     }
 
     await applyEmailTemplateOnPage(subject, body);
@@ -739,7 +759,7 @@
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !message.type) return;
 
-    if (message.type === "GET_CONTACTS") {
+    if (message.type === MESSAGE_TYPES.GET_CONTACTS) {
       const countryPrefix = String(message.countryPrefix || DEFAULT_COUNTRY_CODE);
       const messageText = String(message.messageText || "");
       const loadAll = !!message.loadAll;
@@ -751,12 +771,12 @@
       return true;
     }
 
-    if (message.type === "GET_PORTAL_ID") {
+    if (message.type === MESSAGE_TYPES.GET_PORTAL_ID) {
       sendResponse({ ok: true, portalId: getPortalIdFromPath() });
       return;
     }
 
-    if (message.type === "CREATE_NOTE_ON_PAGE") {
+    if (message.type === MESSAGE_TYPES.CREATE_NOTE_ON_PAGE) {
       const noteBody = String(message.noteBody || "");
       createNoteOnPage(noteBody)
         .then(() => sendResponse({ ok: true }))
@@ -764,7 +784,7 @@
       return true;
     }
 
-    if (message.type === "GET_NOTES_ON_PAGE") {
+    if (message.type === MESSAGE_TYPES.GET_NOTES_ON_PAGE) {
       const limit = Number(message.limit || 25);
       getNotesOnPage(limit)
         .then((notes) => sendResponse({ ok: true, notes }))
@@ -772,7 +792,7 @@
       return true;
     }
 
-    if (message.type === "APPLY_EMAIL_TEMPLATE_ON_PAGE") {
+    if (message.type === MESSAGE_TYPES.APPLY_EMAIL_TEMPLATE_ON_PAGE) {
       const subject = String(message.subject || "");
       const body = String(message.body || "");
       applyEmailTemplateOnPage(subject, body)
@@ -781,7 +801,7 @@
       return true;
     }
 
-    if (message.type === "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE") {
+    if (message.type === MESSAGE_TYPES.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE) {
       const subject = String(message.subject || "");
       const body = String(message.body || "");
       openEmailAndApplyTemplateOnPage(subject, body)

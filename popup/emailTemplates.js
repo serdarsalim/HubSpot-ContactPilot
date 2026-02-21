@@ -1,6 +1,8 @@
 (() => {
   const App = window.PopupApp;
   const { dom, state, constants } = App;
+  const MT = App.messageTypes;
+  const timing = App.timing.popup;
 
   function loadEmailTemplatesDraftFromSettings() {
     const normalized = App.normalizeEmailTemplates(state.settings.emailTemplates);
@@ -161,10 +163,10 @@
       }
 
       await App.waitForTabComplete(tab.id);
-      await App.sleep(900);
+      await App.sleep(timing.emailComposerReadyDelayMs);
 
       const response = await chrome.tabs.sendMessage(tab.id, {
-        type: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE",
+        type: MT.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE,
         subject,
         body
       });

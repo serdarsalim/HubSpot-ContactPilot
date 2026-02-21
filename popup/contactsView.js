@@ -1,6 +1,7 @@
 (() => {
   const App = window.PopupApp;
   const { dom, state, constants } = App;
+  const MT = App.messageTypes;
 
   function renderContacts() {
     dom.listEl.innerHTML = "";
@@ -185,7 +186,7 @@
       }
 
       const response = await chrome.tabs.sendMessage(tab.id, {
-        type: "GET_CONTACTS",
+        type: MT.GET_CONTACTS,
         countryPrefix: state.settings.countryPrefix,
         messageText: state.settings.messageTemplate,
         loadAll
@@ -201,8 +202,10 @@
       state.phoneColumnId = response.phoneColumnId || null;
       state.currentPortalId = (await App.getPortalId(tab)) || "";
 
-      App.mergeColumnSettings();
-      await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: state.settings });
+      const settingsChanged = App.mergeColumnSettings();
+      if (settingsChanged) {
+        await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: state.settings });
+      }
 
       state.selectedKeys = new Set();
       state.sortState = { field: null, direction: "asc" };
