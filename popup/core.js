@@ -40,6 +40,7 @@
     listEl: document.getElementById("list"),
 
     settingsBtn: document.getElementById("settingsBtn"),
+    themeToggleBtn: document.getElementById("themeToggleBtn"),
     contactViewBtn: document.getElementById("contactViewBtn"),
     emailSettingsBtn: document.getElementById("emailSettingsBtn"),
     cancelSettingsBtn: document.getElementById("cancelSettingsBtn"),
@@ -101,6 +102,7 @@
     body: "Hi [name],"
   };
   const DEFAULT_SETTINGS = {
+    themeMode: "light",
     countryPrefix: "60",
     messageTemplate: "",
     noteTemplate: "",
@@ -221,10 +223,36 @@
     });
   }
 
+  function normalizeThemeMode(value) {
+    return String(value || "").toLowerCase() === "dark" ? "dark" : "light";
+  }
+
+  function applyTheme(themeMode) {
+    const nextMode = normalizeThemeMode(themeMode);
+    state.settings.themeMode = nextMode;
+    if (document.body) {
+      document.body.setAttribute("data-theme", nextMode);
+    }
+    if (dom.themeToggleBtn) {
+      const nextLabel = nextMode === "dark" ? "Switch to light mode" : "Switch to dark mode";
+      dom.themeToggleBtn.setAttribute("aria-label", nextLabel);
+      dom.themeToggleBtn.setAttribute("title", nextLabel);
+      dom.themeToggleBtn.classList.toggle("active", nextMode === "dark");
+    }
+  }
+
+  function toggleTheme() {
+    const nextMode = state.settings.themeMode === "dark" ? "light" : "dark";
+    applyTheme(nextMode);
+    if (typeof App.persistSyncSettings === "function") {
+      void App.persistSyncSettings(state.settings);
+    }
+  }
+
   function updateStickyHeadOffset() {
     if (!dom.stickyHeadEl || !document?.documentElement?.style) return;
     const stickyHeight = Math.ceil(dom.stickyHeadEl.getBoundingClientRect().height);
-    document.documentElement.style.setProperty("--sticky-head-h", `${stickyHeight + 6}px`);
+    document.documentElement.style.setProperty("--sticky-head-h", `${stickyHeight}px`);
   }
 
   function setStatus(message) {
@@ -416,6 +444,9 @@
     normalizeEmailTemplates,
     templateTokenKey,
     applyTokens,
+    normalizeThemeMode,
+    applyTheme,
+    toggleTheme,
     updateStickyHeadOffset,
     setStatus,
     showToast,

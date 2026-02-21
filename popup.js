@@ -3,6 +3,7 @@
   const { dom, state } = App;
 
   dom.settingsBtn.addEventListener("click", App.toggleSettings);
+  if (dom.themeToggleBtn) dom.themeToggleBtn.addEventListener("click", App.toggleTheme);
   if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.openContactsView);
   if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.toggleEmailSettings);
   dom.cancelSettingsBtn.addEventListener("click", App.closeSettings);

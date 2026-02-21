@@ -129,6 +129,22 @@
         gap: 4px;
       }
 
+      .theme-toggle-btn {
+        margin-left: auto;
+      }
+
+      #themeToggleBtn .theme-icon {
+        display: none;
+      }
+
+      body[data-theme="dark"] #themeToggleBtn .theme-icon-sun {
+        display: block;
+      }
+
+      body:not([data-theme="dark"]) #themeToggleBtn .theme-icon-moon {
+        display: block;
+      }
+
       .title-icon-btn {
         display: inline-flex;
         align-items: center;
@@ -319,7 +335,7 @@
         font-weight: 700;
         position: sticky;
         top: var(--sticky-head-h);
-        z-index: 1;
+        z-index: 2;
         height: 56px;
         box-sizing: border-box;
         vertical-align: middle;
@@ -388,7 +404,7 @@
       th.actions {
         position: sticky;
         top: var(--sticky-head-h);
-        z-index: 1;
+        z-index: 2;
         background: #eef4fb;
       }
 
@@ -1087,6 +1103,159 @@
         opacity: 1;
         transform: translateY(0);
       }
+
+      body[data-theme="dark"] {
+        --bg: #0f1724;
+        --card: #142030;
+        --line: #2a3c53;
+        --muted: #9bb1c9;
+        --text: #e5eefb;
+        --brand: #66a8ff;
+        --brand-soft: #1d2c41;
+        background: linear-gradient(180deg, #132033 0%, #0c1523 100%);
+      }
+
+      body[data-theme="dark"] .sticky-head {
+        background: linear-gradient(180deg, #132033 0%, #0f1724 100%);
+      }
+
+      body[data-theme="dark"] .title-icon-btn {
+        color: #91a8c3;
+      }
+
+      body[data-theme="dark"] .title-icon-btn:hover {
+        color: #82bdff;
+      }
+
+      body[data-theme="dark"] .title-icon-btn.active {
+        background: #223753;
+        border-color: #5798eb;
+        color: #d6e8ff;
+      }
+
+      body[data-theme="dark"] .status {
+        background: #1a2a3f;
+      }
+
+      body[data-theme="dark"] .list,
+      body[data-theme="dark"] .settings-card,
+      body[data-theme="dark"] .email-template-editor-pane,
+      body[data-theme="dark"] .email-templates-sidebar,
+      body[data-theme="dark"] .notes-card,
+      body[data-theme="dark"] .email-template-pick-card,
+      body[data-theme="dark"] .template-import-card {
+        background: var(--card);
+        border-color: var(--line);
+      }
+
+      body[data-theme="dark"] .email-templates-sidebar-head {
+        border-bottom-color: #32465f;
+      }
+
+      body[data-theme="dark"] .email-template-list-btn,
+      body[data-theme="dark"] .email-template-pick-item,
+      body[data-theme="dark"] .check,
+      body[data-theme="dark"] .template-import-item {
+        background: #1a2a3e;
+        border-color: #334960;
+        color: var(--text);
+      }
+
+      body[data-theme="dark"] .email-template-list-btn.active {
+        background: linear-gradient(180deg, #24384f 0%, #1f3248 100%);
+        border-color: #4f6f93;
+      }
+
+      body[data-theme="dark"] .email-template-pick-item:hover,
+      body[data-theme="dark"] .email-template-list-btn:hover {
+        background: #22364d;
+        border-color: #527399;
+      }
+
+      body[data-theme="dark"] .email-template-empty,
+      body[data-theme="dark"] .notes-list,
+      body[data-theme="dark"] .template-import-list,
+      body[data-theme="dark"] .email-template-pick-list {
+        background: #19293c;
+        border-color: #324a64;
+      }
+
+      body[data-theme="dark"] .email-template-pick-search {
+        background: linear-gradient(180deg, #1a2b40 0%, #1a2a3d 100%);
+        border-color: #4a6688;
+        color: #d9e7f8;
+      }
+
+      body[data-theme="dark"] .email-template-pick-search::placeholder {
+        color: #94abc7;
+      }
+
+      body[data-theme="dark"] .email-template-pick-search:focus {
+        background: #1f334b;
+        border-color: #7fb4ef;
+      }
+
+      body[data-theme="dark"] th {
+        background: #21364d;
+        color: #cfe1f7;
+        border-bottom-color: #324a64;
+      }
+
+      body[data-theme="dark"] td {
+        border-bottom-color: #2a3f59;
+      }
+
+      body[data-theme="dark"] td.possibility {
+        color: #a9c1dc;
+      }
+
+      body[data-theme="dark"] th.actions,
+      body[data-theme="dark"] td.actions {
+        border-left-color: #2a3f59;
+      }
+
+      body[data-theme="dark"] tbody tr:hover td {
+        background: #22384f;
+      }
+
+      body[data-theme="dark"] .row-action-btn,
+      body[data-theme="dark"] .status-action,
+      body[data-theme="dark"] .email-template-pick-name {
+        color: #b7d4f8;
+      }
+
+      body[data-theme="dark"] .email-template-pick-preview,
+      body[data-theme="dark"] .notes-empty,
+      body[data-theme="dark"] .template-import-summary {
+        color: #9eb4cd;
+      }
+
+      body[data-theme="dark"] .field input[type="text"],
+      body[data-theme="dark"] .field textarea {
+        background: #1a2a3e;
+        border-color: #456181;
+        color: #d8e6f8;
+      }
+
+      body[data-theme="dark"] .field label {
+        color: #9fb5cd;
+      }
+
+      body[data-theme="dark"] .contacts-bottom-spacer {
+        background: linear-gradient(180deg, #132033 0%, #0f1724 100%);
+      }
+
+      body[data-theme="dark"] .btn {
+        background: #1a2a3f;
+        border-color: #3a516d;
+        color: #d8e8fa;
+      }
+
+      body[data-theme="dark"] .btn.primary {
+        background: #2f78d3;
+        border-color: #2f78d3;
+        color: #fff;
+      }
     </style>
   </head>
   <body>
@@ -1125,6 +1294,15 @@
               </svg>
             </button>
           </div>
+          <button id="themeToggleBtn" class="title-icon-btn theme-toggle-btn" aria-label="Switch to dark mode" title="Switch to dark mode">
+            <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8"></path>
+            </svg>
+            <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2.2M12 19.8V22M4.2 12H2M22 12h-2.2M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6M19.1 19.1l-1.6-1.6M6.5 6.5 4.9 4.9"></path>
+            </svg>
+          </button>
         </div>
 
         <div id="status" class="status">

@@ -405,6 +405,8 @@
       },
       emailTemplates
     };
+    state.settings.themeMode = App.normalizeThemeMode(state.settings.themeMode);
+    App.applyTheme(state.settings.themeMode);
 
     const needsSyncCleanup =
       (saved && (Object.prototype.hasOwnProperty.call(saved, "emailTemplates") || Object.prototype.hasOwnProperty.call(saved, "defaultEmailTemplateId"))) ||
@@ -437,6 +439,7 @@
     }
 
     state.settings = { ...state.settings, ...next };
+    state.settings.themeMode = App.normalizeThemeMode(state.settings.themeMode);
     await persistSyncSettings(state.settings);
     closeSettings();
     App.renderContacts();
