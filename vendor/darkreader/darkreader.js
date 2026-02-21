@@ -7863,14 +7863,8 @@
             fixes && fixes.disableCustomElementRegistryProxy
         );
         document.dispatchEvent(new CustomEvent("__darkreader__cleanUp"));
-        {
-            const proxyScript = createOrUpdateScript("darkreader--proxy");
-            proxyScript.append(
-                `(${injectProxy})(${enableStyleSheetsProxy}, ${enableCustomElementRegistryProxy})`
-            );
-            document.head.insertBefore(proxyScript, rootVarsStyle.nextSibling);
-            proxyScript.remove();
-        }
+        // HubSpot blocks inline scripts via CSP in extension-injected contexts.
+        // Skip proxy script injection to avoid repeated CSP violations.
         const overrideStyle = createOrUpdateStyle("darkreader--override");
         overrideStyle.textContent =
             fixes && fixes.css ? replaceCSSTemplates(fixes.css) : "";
