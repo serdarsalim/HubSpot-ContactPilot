@@ -562,6 +562,180 @@
     return [];
   }
 
+  function findOpenEmailDialog() {
+    const dialogs = Array.from(document.querySelectorAll("[role='dialog']")).filter((dialog) => isVisible(dialog));
+    if (!dialogs.length) return null;
+
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const dialog of dialogs) {
+      const text = elementText(dialog).toLowerCase();
+      let score = 0;
+      if (text.includes("subject")) score += 6;
+      if (text.includes("send")) score += 6;
+      if (text.includes("to")) score += 2;
+      if (text.includes("email")) score += 4;
+      if (text.includes("bcc")) score += 2;
+      if (score > bestScore) {
+        bestScore = score;
+        best = dialog;
+      }
+    }
+
+    return bestScore > 5 ? best : null;
+  }
+
+  function findSubjectInput(dialog) {
+    const candidates = Array.from(dialog.querySelectorAll("input, textarea, [role='textbox']")).filter((el) => isVisible(el));
+    if (!candidates.length) return null;
+
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const el of candidates) {
+      const hint = cleanText(
+        el.getAttribute("placeholder") || el.getAttribute("aria-label") || el.getAttribute("name") || el.getAttribute("id") || ""
+      ).toLowerCase();
+      let score = 0;
+      if (hint.includes("subject")) score += 12;
+      if (hint.includes("title")) score += 3;
+      if (hint.includes("search")) score -= 8;
+      if (String(el.tagName).toLowerCase() === "input") score += 2;
+      const rect = el.getBoundingClientRect();
+      if (rect.height < 56) score += 1;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    }
+
+    return bestScore > 2 ? best : null;
+  }
+
+  function findBodyEditor(dialog) {
+    const candidates = Array.from(dialog.querySelectorAll("[contenteditable='true'], textarea, [role='textbox']")).filter((el) => isVisible(el));
+    if (!candidates.length) return null;
+
+    let best = null;
+    let bestScore = -Infinity;
+    for (const el of candidates) {
+      const hint = cleanText(
+        el.getAttribute("placeholder") || el.getAttribute("aria-label") || el.getAttribute("name") || el.getAttribute("id") || ""
+      ).toLowerCase();
+
+      let score = 0;
+      if (hint.includes("message") || hint.includes("body") || hint.includes("email")) score += 8;
+      if (hint.includes("subject")) score -= 10;
+      if (hint.includes("search")) score -= 8;
+      if (el.closest("[role='toolbar']")) score -= 10;
+      if (el.getAttribute("contenteditable") === "true") score += 5;
+      const rect = el.getBoundingClientRect();
+      if (rect.height >= 120) score += 4;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    }
+
+    return bestScore > 2 ? best : null;
+  }
+
+  function setInputValue(input, value) {
+    const next = String(value || "");
+    input.focus();
+
+    if (input.tagName === "INPUT" || input.tagName === "TEXTAREA") {
+      input.value = next;
+    } else {
+      input.textContent = next;
+    }
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function prependEditorText(editor, text) {
+    const value = String(text || "").trim();
+    if (!value) return;
+    editor.focus();
+
+    if (editor.tagName === "TEXTAREA" || editor.tagName === "INPUT") {
+      const current = String(editor.value || "");
+      editor.value = current ? `${value}\n\n${current}` : value;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const inserted = `${value}\n\n`;
+    if (!document.execCommand("insertText", false, inserted)) {
+      range.insertNode(document.createTextNode(inserted));
+    }
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, data: inserted, inputType: "insertText" }));
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  async function applyEmailTemplateOnPage(subject, body) {
+    const dialog = findOpenEmailDialog();
+    if (!dialog) {
+      throw new Error("Open a HubSpot Email composer first.");
+    }
+
+    const subjectText = String(subject || "").trim();
+    if (subjectText) {
+      const subjectInput = findSubjectInput(dialog);
+      if (!subjectInput) {
+        throw new Error("Could not find the email Subject field.");
+      }
+      setInputValue(subjectInput, subjectText);
+    }
+
+    const bodyText = String(body || "").trim();
+    if (bodyText) {
+      const bodyEditor = findBodyEditor(dialog);
+      if (!bodyEditor) {
+        throw new Error("Could not find the email body editor.");
+      }
+      prependEditorText(bodyEditor, bodyText);
+    }
+  }
+
+  function clickEmailComposerTrigger() {
+    const triggers = Array.from(document.querySelectorAll("button, [role='button'], a")).filter((el) => {
+      if (!isVisible(el)) return false;
+      const text = elementText(el).toLowerCase();
+      if (!text) return false;
+      if (text.includes("send")) return false;
+      if (text.includes("email")) return true;
+      if (text.includes("compose")) return true;
+      return false;
+    });
+
+    if (!triggers.length) return false;
+    triggers[0].click();
+    return true;
+  }
+
+  async function openEmailAndApplyTemplateOnPage(subject, body) {
+    for (let i = 0; i < 20; i += 1) {
+      const existing = findOpenEmailDialog();
+      if (existing) break;
+      clickEmailComposerTrigger();
+      await sleep(300);
+    }
+
+    await applyEmailTemplateOnPage(subject, body);
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !message.type) return;
 
@@ -594,6 +768,24 @@
       const limit = Number(message.limit || 25);
       getNotesOnPage(limit)
         .then((notes) => sendResponse({ ok: true, notes }))
+        .catch((error) => sendResponse({ ok: false, error: String(error) }));
+      return true;
+    }
+
+    if (message.type === "APPLY_EMAIL_TEMPLATE_ON_PAGE") {
+      const subject = String(message.subject || "");
+      const body = String(message.body || "");
+      applyEmailTemplateOnPage(subject, body)
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, error: String(error) }));
+      return true;
+    }
+
+    if (message.type === "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE") {
+      const subject = String(message.subject || "");
+      const body = String(message.body || "");
+      openEmailAndApplyTemplateOnPage(subject, body)
+        .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error) }));
       return true;
     }

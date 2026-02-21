@@ -1,41 +1,64 @@
 const statusEl = document.getElementById("status");
 const statusTextEl = document.getElementById("statusText");
 const statusActionsEl = document.getElementById("statusActions");
+const mainPageEl = document.getElementById("mainPage");
+const emailTemplatesPageEl = document.getElementById("emailTemplatesPage");
 const stickyHeadEl = document.getElementById("stickyHead");
 const listEl = document.getElementById("list");
 
 const settingsBtn = document.getElementById("settingsBtn");
+const emailSettingsBtn = document.getElementById("emailSettingsBtn");
 const cancelSettingsBtn = document.getElementById("cancelSettingsBtn");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 const settingsOverlay = document.getElementById("settingsOverlay");
 const columnChecks = document.getElementById("columnChecks");
 const notesOverlay = document.getElementById("notesOverlay");
+const emailTemplatePickOverlay = document.getElementById("emailTemplatePickOverlay");
 const notesTitleEl = document.getElementById("notesTitle");
 const notesListEl = document.getElementById("notesList");
 const notesTextInput = document.getElementById("notesTextInput");
 const closeNotesBtn = document.getElementById("closeNotesBtn");
 const cancelNotesBtn = document.getElementById("cancelNotesBtn");
 const saveNoteBtn = document.getElementById("saveNoteBtn");
+const emailTemplatePickTitle = document.getElementById("emailTemplatePickTitle");
+const emailTemplatePickList = document.getElementById("emailTemplatePickList");
+const cancelEmailTemplatePickBtn = document.getElementById("cancelEmailTemplatePickBtn");
 
 const refreshBtn = document.getElementById("refreshBtn");
 const csvSelectedBtn = document.getElementById("csvSelectedBtn");
 const vcfSelectedBtn = document.getElementById("vcfSelectedBtn");
 const copyEmailBtn = document.getElementById("copyEmailBtn");
-const logWhatsappBtn = document.getElementById("logWhatsappBtn");
 
 const countryPrefixInput = document.getElementById("countryPrefixInput");
 const messageTemplateInput = document.getElementById("messageTemplateInput");
 const noteTemplateInput = document.getElementById("noteTemplateInput");
 const rowFilterInput = document.getElementById("rowFilterInput");
+const emailTemplatesListEl = document.getElementById("emailTemplatesList");
+const addEmailTemplateBtn = document.getElementById("addEmailTemplateBtn");
+const closeEmailTemplatesPageBtn = document.getElementById("closeEmailTemplatesPageBtn");
+const saveEmailTemplatesPageBtn = document.getElementById("saveEmailTemplatesPageBtn");
+const emailTemplateEmptyEl = document.getElementById("emailTemplateEmpty");
+const emailTemplateEditorEl = document.getElementById("emailTemplateEditor");
+const emailTemplateNameInput = document.getElementById("emailTemplateNameInput");
+const emailTemplateSubjectInput = document.getElementById("emailTemplateSubjectInput");
+const emailTemplateBodyInput = document.getElementById("emailTemplateBodyInput");
+const deleteEmailTemplateBtn = document.getElementById("deleteEmailTemplateBtn");
 
 const SETTINGS_KEY = "popupSettings";
 const LEGACY_NOTE_TEXT = "Reached out on WhatsApp";
+const DEFAULT_EMAIL_TEMPLATE = {
+  id: "template_default",
+  name: "Template 1",
+  subject: "",
+  body: "Hi [name],"
+};
 const DEFAULT_SETTINGS = {
   countryPrefix: "60",
   messageTemplate: "",
   noteTemplate: "",
   rowFilterWord: "",
-  visibleColumns: {}
+  visibleColumns: {},
+  emailTemplates: [DEFAULT_EMAIL_TEMPLATE]
 };
 
 let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
@@ -54,6 +77,13 @@ let notesDialogState = {
 };
 let notesLoadToken = 0;
 let contactsLoading = false;
+let emailTemplatesDraft = [];
+let activeEmailTemplateId = "";
+let syncingEmailTemplateForm = false;
+let emailTemplatePickState = {
+  key: "",
+  contact: null
+};
 
 function columnType(col) {
   if (col.id === phoneColumnId) return "phone";
@@ -91,6 +121,49 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function makeTemplateId() {
+  return `template_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeEmailTemplates(rawTemplates) {
+  const templates = [];
+  const seen = new Set();
+  const source = Array.isArray(rawTemplates) ? rawTemplates : [];
+
+  for (const item of source) {
+    const id = String(item?.id || "").trim() || makeTemplateId();
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    templates.push({
+      id,
+      name: String(item?.name || "").trim() || "Untitled",
+      subject: String(item?.subject || "").trim(),
+      body: String(item?.body || "").trim()
+    });
+  }
+
+  if (!templates.length) {
+    templates.push({ ...DEFAULT_EMAIL_TEMPLATE });
+  }
+  return templates;
+}
+
+function templateTokenKey(input) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function applyTokens(text, tokens) {
+  return String(text || "").replace(/\[([a-z0-9_]+)\]/gi, (_match, tokenName) => {
+    const key = templateTokenKey(tokenName);
+    return Object.prototype.hasOwnProperty.call(tokens, key) ? String(tokens[key] || "") : "";
+  });
 }
 
 function setStatus(message) {
@@ -159,6 +232,184 @@ function renderColumnChecks() {
     .join("");
 
   columnChecks.innerHTML = html;
+}
+
+function loadEmailTemplatesDraftFromSettings() {
+  const normalized = normalizeEmailTemplates(settings.emailTemplates);
+  emailTemplatesDraft = normalized.map((template) => ({ ...template }));
+  activeEmailTemplateId = emailTemplatesDraft[0]?.id || "";
+}
+
+function getActiveEmailTemplateDraft() {
+  return emailTemplatesDraft.find((template) => template.id === activeEmailTemplateId) || null;
+}
+
+function renderEmailTemplatesList() {
+  if (!emailTemplatesListEl) return;
+  if (!emailTemplatesDraft.length) {
+    emailTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates yet.</div>";
+    return;
+  }
+
+  emailTemplatesListEl.innerHTML = emailTemplatesDraft
+    .map((template) => {
+      const activeClass = template.id === activeEmailTemplateId ? "active" : "";
+      const summary = String(template.subject || template.body || "").trim();
+      return `
+        <button type='button' class='email-template-list-btn ${activeClass}' data-template-id='${escapeHtml(template.id)}'>
+          <span class='email-template-list-name'>${escapeHtml(template.name || "Untitled")}</span>
+          <span class='email-template-list-meta'>${escapeHtml(summary.slice(0, 52) || "No subject/body yet")}</span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderActiveEmailTemplateEditor() {
+  const active = getActiveEmailTemplateDraft();
+  const hasActive = !!active;
+
+  if (emailTemplateEmptyEl) emailTemplateEmptyEl.hidden = hasActive;
+  if (emailTemplateEditorEl) emailTemplateEditorEl.hidden = !hasActive;
+  if (!hasActive) return;
+
+  syncingEmailTemplateForm = true;
+  if (emailTemplateNameInput) emailTemplateNameInput.value = active.name || "";
+  if (emailTemplateSubjectInput) emailTemplateSubjectInput.value = active.subject || "";
+  if (emailTemplateBodyInput) emailTemplateBodyInput.value = active.body || "";
+  syncingEmailTemplateForm = false;
+}
+
+function renderEmailTemplatesPage() {
+  renderEmailTemplatesList();
+  renderActiveEmailTemplateEditor();
+}
+
+function upsertActiveTemplateFromForm() {
+  if (syncingEmailTemplateForm) return;
+  const active = getActiveEmailTemplateDraft();
+  if (!active) return;
+
+  active.name = String(emailTemplateNameInput?.value || "").trim() || "Untitled";
+  active.subject = String(emailTemplateSubjectInput?.value || "").trim();
+  active.body = String(emailTemplateBodyInput?.value || "").trim();
+  renderEmailTemplatesList();
+}
+
+function addEmailTemplateDraft() {
+  const nextTemplate = {
+    id: makeTemplateId(),
+    name: `Template ${emailTemplatesDraft.length + 1}`,
+    subject: "",
+    body: ""
+  };
+  emailTemplatesDraft = [...emailTemplatesDraft, nextTemplate];
+  activeEmailTemplateId = nextTemplate.id;
+  renderEmailTemplatesPage();
+  if (emailTemplateNameInput) emailTemplateNameInput.focus();
+}
+
+function deleteActiveEmailTemplateDraft() {
+  if (!activeEmailTemplateId) return;
+  emailTemplatesDraft = emailTemplatesDraft.filter((template) => template.id !== activeEmailTemplateId);
+  if (!emailTemplatesDraft.length) {
+    emailTemplatesDraft = [{ ...DEFAULT_EMAIL_TEMPLATE, id: makeTemplateId() }];
+  }
+  activeEmailTemplateId = emailTemplatesDraft[0].id;
+  renderEmailTemplatesPage();
+}
+
+function renderEmailTemplatePickerOptions() {
+  if (!emailTemplatePickList) return;
+  const templates = normalizeEmailTemplates(settings.emailTemplates);
+  if (!templates.length) {
+    emailTemplatePickList.innerHTML = "<div class='email-template-empty'>No templates found. Add one via the email icon.</div>";
+    return;
+  }
+
+  emailTemplatePickList.innerHTML = templates
+    .map((template) => {
+      const preview = String(template.subject || template.body || "").trim();
+      return `
+        <button type='button' class='email-template-pick-item' data-template-id='${escapeHtml(template.id)}'>
+          <span class='email-template-pick-name'>${escapeHtml(template.name || "Untitled")}</span>
+          <span class='email-template-pick-preview'>${escapeHtml(preview.slice(0, 90) || "No subject/body yet")}</span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function openEmailTemplatePicker(contact, key) {
+  if (!emailTemplatePickOverlay) return;
+  emailTemplatePickState = {
+    key: String(key || ""),
+    contact: contact || null
+  };
+  if (emailTemplatePickTitle) {
+    emailTemplatePickTitle.textContent = `Select Template - ${getContactDisplayName(contact)}`;
+  }
+  renderEmailTemplatePickerOptions();
+  emailTemplatePickOverlay.classList.add("open");
+}
+
+function closeEmailTemplatePicker() {
+  if (emailTemplatePickOverlay) emailTemplatePickOverlay.classList.remove("open");
+  emailTemplatePickState = { key: "", contact: null };
+}
+
+async function applyEmailTemplateToContact(contact, key, template) {
+  if (!contact) return;
+  if (!template) {
+    setStatus("No email template found. Add one via the email icon.");
+    return;
+  }
+
+  const recordId = getRecordIdForContact(contact);
+  const contactUrl = buildContactUrl(recordId, currentPortalId);
+  if (!contactUrl) {
+    setStatus("Could not open contact. Missing Record ID or Portal ID.");
+    return;
+  }
+
+  const tokens = getContactTokenMap(contact);
+  const subject = applyTokens(template.subject, tokens).trim();
+  const body = applyTokens(template.body, tokens).trim();
+  if (!subject && !body) {
+    setStatus(`Template "${template.name}" is empty.`);
+    return;
+  }
+
+  const resolvedKey = String(key || contactKey(contact));
+  selectedKeys = new Set([resolvedKey]);
+  renderContacts();
+  setStatus(`Opening ${getContactDisplayName(contact)} and applying "${template.name}"...`);
+
+  try {
+    const tab = await chrome.tabs.create({ url: contactUrl, active: true });
+    if (!tab || typeof tab.id !== "number") {
+      setStatus("Could not open HubSpot contact tab.");
+      return;
+    }
+
+    await waitForTabComplete(tab.id);
+    await sleep(900);
+
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE",
+      subject,
+      body
+    });
+
+    if (!response?.ok) {
+      setStatus(response?.error || "Opened contact, but could not apply email template.");
+      return;
+    }
+
+    setStatus(`Applied "${template.name}" for ${getContactDisplayName(contact)}.`);
+  } catch (_error) {
+    setStatus("Could not apply email template on HubSpot tab.");
+  }
 }
 
 function getSortedContacts(source) {
@@ -258,7 +509,12 @@ function renderContacts() {
         <tr>
           <td class='sel'><input type='checkbox' class='row-select' data-key='${escapeHtml(key)}' ${checked} /></td>
           ${cellsHtml}
-          <td class='actions'><button type='button' class='row-action-btn row-notes-btn' data-key='${escapeHtml(key)}'>Notes</button></td>
+          <td class='actions'>
+            <span class='row-actions-wrap'>
+              <button type='button' class='row-action-btn row-email-btn' data-key='${escapeHtml(key)}'>Email</button>
+              <button type='button' class='row-action-btn row-notes-btn' data-key='${escapeHtml(key)}'>Notes</button>
+            </span>
+          </td>
         </tr>
       `;
     })
@@ -315,6 +571,17 @@ function renderContacts() {
     });
   });
 
+  listEl.querySelectorAll(".row-email-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const key = button.getAttribute("data-key");
+      if (!key) return;
+      const contact = displayedByKey.get(key);
+      if (!contact) return;
+
+      openEmailTemplatePicker(contact, key);
+    });
+  });
+
   const selectAllShown = document.getElementById("selectAllShown");
   if (selectAllShown) {
     selectAllShown.addEventListener("change", () => {
@@ -363,17 +630,45 @@ function closeSettings() {
   settingsOverlay.classList.remove("open");
 }
 
+function openEmailSettings() {
+  closeEmailTemplatePicker();
+  loadEmailTemplatesDraftFromSettings();
+  renderEmailTemplatesPage();
+  if (mainPageEl) mainPageEl.hidden = true;
+  if (emailTemplatesPageEl) emailTemplatesPageEl.hidden = false;
+}
+
+function closeEmailSettings() {
+  if (emailTemplatesPageEl) emailTemplatesPageEl.hidden = true;
+  if (mainPageEl) mainPageEl.hidden = false;
+  updateStickyHeadOffset();
+}
+
+async function saveEmailSettings() {
+  const next = normalizeEmailTemplates(emailTemplatesDraft);
+  settings = {
+    ...settings,
+    emailTemplates: next
+  };
+  await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+  closeEmailSettings();
+  setStatus("Email templates saved.");
+}
+
 async function loadSettings() {
   const result = await chrome.storage.sync.get(SETTINGS_KEY);
   const saved = result[SETTINGS_KEY];
+  const { defaultEmailTemplateId: _legacyDefaultId, ...savedWithoutLegacyDefault } = saved || {};
 
+  const emailTemplates = normalizeEmailTemplates(savedWithoutLegacyDefault?.emailTemplates);
   settings = {
     ...DEFAULT_SETTINGS,
-    ...(saved || {}),
+    ...savedWithoutLegacyDefault,
     visibleColumns: {
       ...DEFAULT_SETTINGS.visibleColumns,
-      ...((saved && saved.visibleColumns) || {})
-    }
+      ...(savedWithoutLegacyDefault.visibleColumns || {})
+    },
+    emailTemplates
   };
 
   if (settings.noteTemplate === LEGACY_NOTE_TEXT) {
@@ -390,7 +685,7 @@ async function saveSettings() {
     return;
   }
 
-  settings = next;
+  settings = { ...settings, ...next };
   await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
   closeSettings();
   renderContacts();
@@ -580,16 +875,55 @@ function getRecordIdForContact(contact) {
   return String(contact?.values?.[recordIdColumn.id] || "").replace(/\D/g, "");
 }
 
+function getFirstNameFromContact(contact) {
+  const full = getContactDisplayName(contact);
+  const first = String(full || "")
+    .trim()
+    .split(/\s+/)[0];
+  return first || full || "";
+}
+
+function getContactTokenMap(contact) {
+  const tokens = {
+    name: getContactDisplayName(contact),
+    first_name: getFirstNameFromContact(contact),
+    phone: String(contact?.phoneDisplay || "").trim(),
+    possibility: ""
+  };
+
+  const emailColumn = findEmailColumn();
+  if (emailColumn) {
+    tokens.email = String(contact?.values?.[emailColumn.id] || "").trim();
+  } else {
+    tokens.email = "";
+  }
+
+  for (const column of currentColumns) {
+    const value = String(contact?.values?.[column.id] || "").trim();
+    const keyById = templateTokenKey(column.id);
+    if (keyById) tokens[keyById] = value;
+
+    const keyByLabel = templateTokenKey(column.label);
+    if (keyByLabel && !Object.prototype.hasOwnProperty.call(tokens, keyByLabel)) {
+      tokens[keyByLabel] = value;
+    }
+  }
+
+  if (!tokens.possibility) {
+    const possibilityColumn = currentColumns.find((c) => /possibility/i.test(c.label) || /^possibility(_\d+)?$/i.test(c.id));
+    if (possibilityColumn) {
+      tokens.possibility = String(contact?.values?.[possibilityColumn.id] || "").trim();
+    }
+  }
+
+  return tokens;
+}
+
 function buildContactUrl(recordId, portalId) {
   const cleanRecordId = String(recordId || "").replace(/\D/g, "");
   const cleanPortalId = String(portalId || "").replace(/\D/g, "");
   if (!cleanRecordId || !cleanPortalId) return "";
   return `https://app.hubspot.com/contacts/${cleanPortalId}/record/0-1/${cleanRecordId}`;
-}
-
-function getSelectedRecordIds() {
-  const contacts = getSelectedContacts();
-  return [...new Set(contacts.map((c) => getRecordIdForContact(c)).filter(Boolean))];
 }
 
 async function findHubSpotTab() {
@@ -836,33 +1170,6 @@ async function copyEmailSelected() {
   }
 }
 
-async function logWhatsappNoteSelected() {
-  const recordIds = getSelectedRecordIds();
-  if (!recordIds.length) {
-    setStatus("No selected rows with Record ID found.");
-    return;
-  }
-
-  const noteBody = String(settings.noteTemplate || "").trim();
-  if (!noteBody) {
-    setStatus("Default note is empty. Set one in Settings or use row Notes.");
-    return;
-  }
-  const result = await createHubSpotNotes(recordIds, noteBody);
-  if (!result.ok) {
-    setStatus(result.error || "Could not create notes.");
-    return;
-  }
-
-  const created = Number(result.created || 0);
-  const failed = Array.isArray(result.failed) ? result.failed.length : 0;
-  if (failed > 0) {
-    setStatus(`Logged ${created} note(s). Failed ${failed}.`);
-  } else {
-    setStatus(`Logged ${created} note(s).`);
-  }
-}
-
 async function loadContacts(options = {}) {
   if (contactsLoading) return;
   contactsLoading = true;
@@ -912,11 +1219,62 @@ async function loadContacts(options = {}) {
 }
 
 settingsBtn.addEventListener("click", openSettings);
+if (emailSettingsBtn) emailSettingsBtn.addEventListener("click", openEmailSettings);
 cancelSettingsBtn.addEventListener("click", closeSettings);
 saveSettingsBtn.addEventListener("click", saveSettings);
+
+if (addEmailTemplateBtn) {
+  addEmailTemplateBtn.addEventListener("click", addEmailTemplateDraft);
+}
+
+if (emailTemplatesListEl) {
+  emailTemplatesListEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const rowButton = target.closest("[data-template-id]");
+    if (!(rowButton instanceof HTMLElement)) return;
+    const templateId = String(rowButton.getAttribute("data-template-id") || "");
+    if (!templateId) return;
+    activeEmailTemplateId = templateId;
+    renderEmailTemplatesPage();
+  });
+}
+
 settingsOverlay.addEventListener("click", (event) => {
   if (event.target === settingsOverlay) closeSettings();
 });
+if (emailTemplatePickOverlay) {
+  emailTemplatePickOverlay.addEventListener("click", (event) => {
+    if (event.target === emailTemplatePickOverlay) closeEmailTemplatePicker();
+  });
+}
+if (cancelEmailTemplatePickBtn) cancelEmailTemplatePickBtn.addEventListener("click", closeEmailTemplatePicker);
+if (emailTemplatePickList) {
+  emailTemplatePickList.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const button = target.closest("[data-template-id]");
+    if (!(button instanceof HTMLElement)) return;
+
+    const templateId = String(button.getAttribute("data-template-id") || "");
+    if (!templateId) return;
+    const template = normalizeEmailTemplates(settings.emailTemplates).find((item) => item.id === templateId) || null;
+    const contact = emailTemplatePickState.contact;
+    const key = emailTemplatePickState.key;
+    closeEmailTemplatePicker();
+    void applyEmailTemplateToContact(contact, key, template);
+  });
+}
+if (closeEmailTemplatesPageBtn) closeEmailTemplatesPageBtn.addEventListener("click", closeEmailSettings);
+if (saveEmailTemplatesPageBtn) {
+  saveEmailTemplatesPageBtn.addEventListener("click", () => {
+    void saveEmailSettings();
+  });
+}
+if (deleteEmailTemplateBtn) deleteEmailTemplateBtn.addEventListener("click", deleteActiveEmailTemplateDraft);
+if (emailTemplateNameInput) emailTemplateNameInput.addEventListener("input", upsertActiveTemplateFromForm);
+if (emailTemplateSubjectInput) emailTemplateSubjectInput.addEventListener("input", upsertActiveTemplateFromForm);
+if (emailTemplateBodyInput) emailTemplateBodyInput.addEventListener("input", upsertActiveTemplateFromForm);
 if (notesOverlay) {
   notesOverlay.addEventListener("click", (event) => {
     if (event.target === notesOverlay) closeNotesDialog();
@@ -938,9 +1296,6 @@ csvSelectedBtn.addEventListener("click", exportCsvSelected);
 vcfSelectedBtn.addEventListener("click", exportVcfSelected);
 copyEmailBtn.addEventListener("click", () => {
   void copyEmailSelected();
-});
-logWhatsappBtn.addEventListener("click", () => {
-  void logWhatsappNoteSelected();
 });
 
 async function init() {
