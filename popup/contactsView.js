@@ -1,6 +1,6 @@
 (() => {
   const App = window.PopupApp;
-  const { dom, state, constants } = App;
+  const { dom, state } = App;
   const MT = App.messageTypes;
   const RECORD_ID_COLUMN_PATTERN = /^(record_id|recordid|hs_object_id|hs_objectid)$/i;
 
@@ -235,7 +235,7 @@
 
       const settingsChanged = App.mergeColumnSettings();
       if (settingsChanged) {
-        await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: state.settings });
+        await App.persistSyncSettings(state.settings);
       }
 
       state.selectedKeys = new Set();

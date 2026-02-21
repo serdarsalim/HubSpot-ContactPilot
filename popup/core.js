@@ -40,6 +40,7 @@
     listEl: document.getElementById("list"),
 
     settingsBtn: document.getElementById("settingsBtn"),
+    contactViewBtn: document.getElementById("contactViewBtn"),
     emailSettingsBtn: document.getElementById("emailSettingsBtn"),
     cancelSettingsBtn: document.getElementById("cancelSettingsBtn"),
     saveSettingsBtn: document.getElementById("saveSettingsBtn"),
@@ -68,17 +69,19 @@
     rowFilterInput: document.getElementById("rowFilterInput"),
     emailTemplatesListEl: document.getElementById("emailTemplatesList"),
     addEmailTemplateBtn: document.getElementById("addEmailTemplateBtn"),
-    closeEmailTemplatesPageBtn: document.getElementById("closeEmailTemplatesPageBtn"),
-    saveEmailTemplatesPageBtn: document.getElementById("saveEmailTemplatesPageBtn"),
     emailTemplateEmptyEl: document.getElementById("emailTemplateEmpty"),
     emailTemplateEditorEl: document.getElementById("emailTemplateEditor"),
     emailTemplateNameInput: document.getElementById("emailTemplateNameInput"),
     emailTemplateSubjectInput: document.getElementById("emailTemplateSubjectInput"),
     emailTemplateBodyInput: document.getElementById("emailTemplateBodyInput"),
-    deleteEmailTemplateBtn: document.getElementById("deleteEmailTemplateBtn")
+    emailTemplateSaveStateEl: document.getElementById("emailTemplateSaveState"),
+    deleteEmailTemplateBtn: document.getElementById("deleteEmailTemplateBtn"),
+    appToastEl: document.getElementById("appToast")
   };
+  let toastTimerId = null;
 
   const SETTINGS_KEY = "popupSettings";
+  const EMAIL_TEMPLATES_LOCAL_KEY = "popupEmailTemplates";
   const LEGACY_NOTE_TEXT = "Reached out on WhatsApp";
   const DEFAULT_EMAIL_TEMPLATE = {
     id: "template_default",
@@ -125,7 +128,9 @@
     if (col.id === state.phoneColumnId) return "phone";
     if (/name/i.test(col.label) || /^name(_\d+)?$/.test(col.id)) return "name";
     if (/email/i.test(col.label) || /^email(_\d+)?$/.test(col.id)) return "email";
-    if (/possibility/i.test(col.label) || /^possibility(_\d+)?$/.test(col.id)) return "possibility";
+    if (/(possibility|possiblity|probability)/i.test(col.label) || /^(possibility|possiblity|probability)(_\d+)?$/.test(col.id)) {
+      return "possibility";
+    }
     return "plain";
   }
 
@@ -222,6 +227,25 @@
     updateStickyHeadOffset();
   }
 
+  function showToast(message, durationMs = 2200) {
+    if (!dom.appToastEl) {
+      setStatus(message);
+      return;
+    }
+
+    dom.appToastEl.textContent = String(message || "");
+    dom.appToastEl.classList.add("show");
+    if (toastTimerId) {
+      clearTimeout(toastTimerId);
+      toastTimerId = null;
+    }
+    const wait = Math.max(900, Number(durationMs) || 2200);
+    toastTimerId = setTimeout(() => {
+      dom.appToastEl.classList.remove("show");
+      toastTimerId = null;
+    }, wait);
+  }
+
   function setContactsLoadingState(isLoading) {
     if (dom.refreshBtn) dom.refreshBtn.disabled = !!isLoading;
   }
@@ -300,6 +324,14 @@
     );
   }
 
+  function findPossibilityColumn() {
+    return (
+      state.currentColumns.find(
+        (c) => /(possibility|possiblity|probability)/i.test(c.label) || /^(possibility|possiblity|probability)(_\d+)?$/i.test(c.id)
+      ) || null
+    );
+  }
+
   function getContactDisplayName(contact) {
     const nameColumn = findNameColumn();
     if (!nameColumn) return "Contact";
@@ -348,10 +380,8 @@
     }
 
     if (!tokens.possibility) {
-      const possibilityColumn = state.currentColumns.find((c) => /possibility/i.test(c.label) || /^possibility(_\d+)?$/i.test(c.id));
-      if (possibilityColumn) {
-        tokens.possibility = String(contact?.values?.[possibilityColumn.id] || "").trim();
-      }
+      const possibilityColumn = findPossibilityColumn();
+      if (possibilityColumn) tokens.possibility = String(contact?.values?.[possibilityColumn.id] || "").trim();
     }
 
     return tokens;
@@ -377,6 +407,7 @@
   App.dom = dom;
   App.constants = {
     SETTINGS_KEY,
+    EMAIL_TEMPLATES_LOCAL_KEY,
     LEGACY_NOTE_TEXT,
     DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_SETTINGS
@@ -397,6 +428,7 @@
     applyTokens,
     updateStickyHeadOffset,
     setStatus,
+    showToast,
     setContactsLoadingState,
     contactKey,
     getFilterWord,
@@ -409,6 +441,7 @@
     findEmailColumn,
     findNameColumn,
     findRecordIdColumn,
+    findPossibilityColumn,
     getContactDisplayName,
     getRecordIdForContact,
     getFirstNameFromContact,

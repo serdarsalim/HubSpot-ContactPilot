@@ -3,7 +3,8 @@
   const { dom, state } = App;
 
   dom.settingsBtn.addEventListener("click", App.openSettings);
-  if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.openEmailSettings);
+  if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.closeEmailSettings);
+  if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.toggleEmailSettings);
   dom.cancelSettingsBtn.addEventListener("click", App.closeSettings);
   dom.saveSettingsBtn.addEventListener("click", App.saveSettings);
 
@@ -53,17 +54,12 @@
     });
   }
 
-  if (dom.closeEmailTemplatesPageBtn) dom.closeEmailTemplatesPageBtn.addEventListener("click", App.closeEmailSettings);
-  if (dom.saveEmailTemplatesPageBtn) {
-    dom.saveEmailTemplatesPageBtn.addEventListener("click", () => {
-      void App.saveEmailSettings();
-    });
-  }
-
   if (dom.deleteEmailTemplateBtn) dom.deleteEmailTemplateBtn.addEventListener("click", App.deleteActiveEmailTemplateDraft);
   if (dom.emailTemplateNameInput) dom.emailTemplateNameInput.addEventListener("input", App.upsertActiveTemplateFromForm);
   if (dom.emailTemplateSubjectInput) dom.emailTemplateSubjectInput.addEventListener("input", App.upsertActiveTemplateFromForm);
   if (dom.emailTemplateBodyInput) dom.emailTemplateBodyInput.addEventListener("input", App.upsertActiveTemplateFromForm);
+  if (dom.emailTemplateNameInput) dom.emailTemplateNameInput.addEventListener("blur", () => void App.flushEmailTemplateAutosave({ showToast: false }));
+  if (dom.emailTemplateSubjectInput) dom.emailTemplateSubjectInput.addEventListener("blur", () => void App.flushEmailTemplateAutosave({ showToast: false }));
 
   if (dom.notesOverlay) {
     dom.notesOverlay.addEventListener("click", (event) => {

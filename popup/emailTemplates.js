@@ -4,8 +4,22 @@
   const MT = App.messageTypes;
   const timing = App.timing.popup;
   const BODY_EDITOR_ID = "emailTemplateBodyInput";
+  const TINYMCE_TOOLBAR_ORDER = [
+    "blocks",
+    "bold italic underline strikethrough",
+    "bullist numlist",
+    "forecolor backcolor",
+    "alignleft aligncenter alignright",
+    "removeformat",
+    "undo redo"
+  ].join(" | ");
+  const AUTOSAVE_DELAY_MS = 1000;
   let emailBodyEditorInitPromise = null;
   let tinyEditorUnavailable = false;
+  let autosaveTimerId = null;
+  let autosaveInFlight = false;
+  let autosaveQueued = false;
+  let lastSavedDraftSignature = "";
 
   function htmlToPlainText(value) {
     const raw = String(value || "");
@@ -42,6 +56,93 @@
     const tiny = window.tinymce;
     if (!tiny || typeof tiny.get !== "function") return null;
     return tiny.get(BODY_EDITOR_ID) || null;
+  }
+
+  function setEmailTemplateSaveState(stateKey, text) {
+    if (!dom.emailTemplateSaveStateEl) return;
+    dom.emailTemplateSaveStateEl.dataset.state = String(stateKey || "saved");
+    dom.emailTemplateSaveStateEl.textContent = String(text || "Saved");
+  }
+
+  function getEmailTemplateDraftSignature() {
+    return JSON.stringify(App.normalizeEmailTemplates(state.emailTemplatesDraft));
+  }
+
+  function getErrorMessage(error) {
+    if (!error) return "Unknown error.";
+    if (typeof error === "string") return error;
+    if (typeof error?.message === "string" && error.message.trim()) return error.message.trim();
+    try {
+      return JSON.stringify(error);
+    } catch (_stringifyError) {
+      return String(error);
+    }
+  }
+
+  async function saveEmailTemplateDraftNow(force = false) {
+    if (autosaveInFlight) {
+      autosaveQueued = true;
+      return false;
+    }
+
+    const signatureBefore = getEmailTemplateDraftSignature();
+    if (!force && signatureBefore === lastSavedDraftSignature) {
+      setEmailTemplateSaveState("saved", "Saved");
+      return true;
+    }
+
+    autosaveInFlight = true;
+    setEmailTemplateSaveState("saving", "Saving...");
+
+    try {
+      await App.saveEmailSettings({ showToast: false });
+      lastSavedDraftSignature = getEmailTemplateDraftSignature();
+      setEmailTemplateSaveState("saved", "Saved");
+      return true;
+    } catch (error) {
+      const reason = getErrorMessage(error).replace(/\s+/g, " ").trim();
+      setEmailTemplateSaveState("error", "Save failed");
+      App.setStatus(`Template save failed: ${reason || "Unknown error."}`);
+      if (typeof App.showToast === "function") {
+        App.showToast(`Save failed: ${reason || "Unknown error."}`, 3200);
+      }
+      if (typeof console !== "undefined" && typeof console.error === "function") {
+        console.error("Template autosave failed", error);
+      }
+      return false;
+    } finally {
+      autosaveInFlight = false;
+      if (autosaveQueued) {
+        autosaveQueued = false;
+        void saveEmailTemplateDraftNow();
+      }
+    }
+  }
+
+  function scheduleEmailTemplateAutosave() {
+    const signature = getEmailTemplateDraftSignature();
+    if (signature === lastSavedDraftSignature) {
+      setEmailTemplateSaveState("saved", "Saved");
+      return;
+    }
+
+    setEmailTemplateSaveState("saving", "Saving...");
+    if (autosaveTimerId) {
+      clearTimeout(autosaveTimerId);
+      autosaveTimerId = null;
+    }
+    autosaveTimerId = setTimeout(() => {
+      autosaveTimerId = null;
+      void saveEmailTemplateDraftNow();
+    }, AUTOSAVE_DELAY_MS);
+  }
+
+  async function flushEmailTemplateAutosave(_options = {}) {
+    if (autosaveTimerId) {
+      clearTimeout(autosaveTimerId);
+      autosaveTimerId = null;
+    }
+    return saveEmailTemplateDraftNow(true);
   }
 
   function readEmailBodyValueFromForm() {
@@ -93,14 +194,17 @@
         branding: false,
         promotion: false,
         resize: false,
-        toolbar:
-          "undo redo | blocks | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright | removeformat",
+        plugins: "lists",
+        toolbar: TINYMCE_TOOLBAR_ORDER,
         skin: "oxide",
         content_css: "default",
         setup(editor) {
           editor.on("change input undo redo keyup", () => {
             if (state.syncingEmailTemplateForm) return;
             upsertActiveTemplateFromForm();
+          });
+          editor.on("blur", () => {
+            void flushEmailTemplateAutosave({ showToast: false });
           });
         }
       })
@@ -123,6 +227,8 @@
     const normalized = App.normalizeEmailTemplates(state.settings.emailTemplates);
     state.emailTemplatesDraft = normalized.map((template) => ({ ...template }));
     state.activeEmailTemplateId = state.emailTemplatesDraft[0]?.id || "";
+    lastSavedDraftSignature = getEmailTemplateDraftSignature();
+    setEmailTemplateSaveState("saved", "Saved");
   }
 
   function getActiveEmailTemplateDraft() {
@@ -179,6 +285,7 @@
     active.subject = String(dom.emailTemplateSubjectInput?.value || "").trim();
     active.body = readEmailBodyValueFromForm();
     renderEmailTemplatesList();
+    scheduleEmailTemplateAutosave();
   }
 
   function addEmailTemplateDraft() {
@@ -191,6 +298,7 @@
     state.emailTemplatesDraft = [...state.emailTemplatesDraft, nextTemplate];
     state.activeEmailTemplateId = nextTemplate.id;
     renderEmailTemplatesPage();
+    scheduleEmailTemplateAutosave();
     if (dom.emailTemplateNameInput) dom.emailTemplateNameInput.focus();
   }
 
@@ -202,6 +310,7 @@
     }
     state.activeEmailTemplateId = state.emailTemplatesDraft[0].id;
     renderEmailTemplatesPage();
+    scheduleEmailTemplateAutosave();
   }
 
   function renderEmailTemplatePickerOptions() {
@@ -310,6 +419,7 @@
     addEmailTemplateDraft,
     deleteActiveEmailTemplateDraft,
     ensureEmailBodyEditor,
+    flushEmailTemplateAutosave,
     renderEmailTemplatePickerOptions,
     openEmailTemplatePicker,
     closeEmailTemplatePicker,

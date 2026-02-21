@@ -2,6 +2,17 @@
   const App = window.PopupApp;
   const { dom, state, constants } = App;
 
+  function buildSyncSettingsPayload(settingsInput = state.settings) {
+    const source = settingsInput && typeof settingsInput === "object" ? settingsInput : {};
+    const { emailTemplates: _ignoreTemplates, ...syncSafeSettings } = source;
+    return syncSafeSettings;
+  }
+
+  async function persistSyncSettings(settingsInput = state.settings) {
+    const syncSafeSettings = buildSyncSettingsPayload(settingsInput);
+    await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: syncSafeSettings });
+  }
+
   function renderColumnChecks() {
     if (!dom.columnChecks) return;
 
@@ -55,10 +66,18 @@
     dom.settingsOverlay.classList.remove("open");
   }
 
+  function setEmailTemplatesMode(isOpen) {
+    if (dom.emailSettingsBtn) dom.emailSettingsBtn.classList.toggle("active", !!isOpen);
+    if (dom.contactViewBtn) dom.contactViewBtn.classList.toggle("active", !isOpen);
+    if (dom.mainPageEl) dom.mainPageEl.classList.toggle("header-only", !!isOpen);
+    if (dom.emailTemplatesPageEl) dom.emailTemplatesPageEl.hidden = !isOpen;
+    App.updateStickyHeadOffset();
+  }
+
   function openEmailSettings() {
+    if (!dom.emailTemplatesPageEl || !dom.emailTemplatesPageEl.hidden) return;
     App.closeEmailTemplatePicker();
-    if (dom.mainPageEl) dom.mainPageEl.hidden = true;
-    if (dom.emailTemplatesPageEl) dom.emailTemplatesPageEl.hidden = false;
+    setEmailTemplatesMode(true);
     App.loadEmailTemplatesDraftFromSettings();
     App.renderEmailTemplatesPage();
     if (typeof App.ensureEmailBodyEditor === "function") {
@@ -69,41 +88,82 @@
   }
 
   function closeEmailSettings() {
-    if (dom.emailTemplatesPageEl) dom.emailTemplatesPageEl.hidden = true;
-    if (dom.mainPageEl) dom.mainPageEl.hidden = false;
-    App.updateStickyHeadOffset();
+    if (!dom.emailTemplatesPageEl || dom.emailTemplatesPageEl.hidden) return;
+    if (typeof App.flushEmailTemplateAutosave === "function") {
+      void App.flushEmailTemplateAutosave({ showToast: false });
+    }
+    setEmailTemplatesMode(false);
   }
 
-  async function saveEmailSettings() {
+  function toggleEmailSettings() {
+    if (dom.emailTemplatesPageEl?.hidden) {
+      openEmailSettings();
+      return;
+    }
+    closeEmailSettings();
+  }
+
+  async function saveEmailSettings(options = {}) {
+    const showToast = options?.showToast === true;
+    const toastMessage = String(options?.toastMessage || "Template saved.");
     const next = App.normalizeEmailTemplates(state.emailTemplatesDraft);
     state.settings = {
       ...state.settings,
       emailTemplates: next
     };
-    await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: state.settings });
-    closeEmailSettings();
-    App.setStatus("Email templates saved.");
+    await chrome.storage.local.set({ [constants.EMAIL_TEMPLATES_LOCAL_KEY]: next });
+    if (showToast) {
+      if (typeof App.showToast === "function") {
+        App.showToast(toastMessage);
+      } else {
+        App.setStatus(toastMessage);
+      }
+    }
   }
 
   async function loadSettings() {
-    const result = await chrome.storage.sync.get(constants.SETTINGS_KEY);
-    const saved = result[constants.SETTINGS_KEY];
-    const { defaultEmailTemplateId: _legacyDefaultId, ...savedWithoutLegacyDefault } = saved || {};
-
-    const emailTemplates = App.normalizeEmailTemplates(savedWithoutLegacyDefault?.emailTemplates);
+    const [syncResult, localResult] = await Promise.all([
+      chrome.storage.sync.get(constants.SETTINGS_KEY),
+      chrome.storage.local.get(constants.EMAIL_TEMPLATES_LOCAL_KEY)
+    ]);
+    const saved = syncResult[constants.SETTINGS_KEY];
+    const {
+      defaultEmailTemplateId: _legacyDefaultId,
+      emailTemplates: legacySyncTemplates,
+      ...savedWithoutLegacy
+    } = saved || {};
+    const localTemplates = localResult[constants.EMAIL_TEMPLATES_LOCAL_KEY];
+    const hasLocalTemplates = Array.isArray(localTemplates);
+    const emailTemplates = App.normalizeEmailTemplates(hasLocalTemplates ? localTemplates : legacySyncTemplates);
     state.settings = {
       ...constants.DEFAULT_SETTINGS,
-      ...savedWithoutLegacyDefault,
+      ...savedWithoutLegacy,
       visibleColumns: {
         ...constants.DEFAULT_SETTINGS.visibleColumns,
-        ...(savedWithoutLegacyDefault.visibleColumns || {})
+        ...(savedWithoutLegacy.visibleColumns || {})
       },
       emailTemplates
     };
 
+    const needsSyncCleanup =
+      (saved && (Object.prototype.hasOwnProperty.call(saved, "emailTemplates") || Object.prototype.hasOwnProperty.call(saved, "defaultEmailTemplateId"))) ||
+      state.settings.noteTemplate === constants.LEGACY_NOTE_TEXT;
+    const writes = [];
+
+    if (!hasLocalTemplates && Array.isArray(legacySyncTemplates)) {
+      writes.push(chrome.storage.local.set({ [constants.EMAIL_TEMPLATES_LOCAL_KEY]: emailTemplates }));
+    }
+
     if (state.settings.noteTemplate === constants.LEGACY_NOTE_TEXT) {
       state.settings.noteTemplate = "";
-      await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: state.settings });
+    }
+
+    if (needsSyncCleanup) {
+      writes.push(persistSyncSettings(state.settings));
+    }
+
+    if (writes.length) {
+      await Promise.all(writes);
     }
   }
 
@@ -116,7 +176,7 @@
     }
 
     state.settings = { ...state.settings, ...next };
-    await chrome.storage.sync.set({ [constants.SETTINGS_KEY]: state.settings });
+    await persistSyncSettings(state.settings);
     closeSettings();
     App.renderContacts();
   }
@@ -127,8 +187,12 @@
     fillSettingsForm,
     openSettings,
     closeSettings,
+    setEmailTemplatesMode,
     openEmailSettings,
     closeEmailSettings,
+    toggleEmailSettings,
+    buildSyncSettingsPayload,
+    persistSyncSettings,
     saveEmailSettings,
     loadSettings,
     saveSettings

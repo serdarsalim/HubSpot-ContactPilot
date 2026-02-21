@@ -239,6 +239,12 @@ Manual smoke test:
   - template management on full templates page
 - Do not add auto-send behavior without explicit guardrails and user confirmation.
 
+## Ideation Protocol
+
+- If the user says `ideate`, discussion-only mode is active.
+- In discussion-only mode, do not edit files, run mutating commands, or implement changes.
+- Stay in discussion-only mode until the user explicitly gives a clear go-ahead to implement.
+
 ## Git/Repo Notes
 
 - Core extension files:

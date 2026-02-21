@@ -64,6 +64,15 @@
         min-height: 0;
       }
 
+      #mainPage.header-only {
+        flex: 0 0 auto;
+      }
+
+      #mainPage.header-only .status,
+      #mainPage.header-only .list {
+        display: none;
+      }
+
       #mainPage[hidden] {
         display: none;
       }
@@ -137,6 +146,12 @@
       .title-icon-btn:hover {
         color: var(--brand);
         transform: translateY(-1px);
+      }
+
+      .title-icon-btn.active {
+        color: var(--brand);
+        border: 1px solid #0b66c3;
+        background: #eaf3fe;
       }
 
       .title-icon-btn:disabled {
@@ -806,11 +821,31 @@
         height: 100%;
       }
 
-      .email-template-inline-actions {
+      .email-template-top-actions {
         display: flex;
+        justify-content: flex-end;
         align-items: center;
-        gap: 8px;
-        margin-top: -2px;
+        gap: 10px;
+      }
+
+      .email-template-save-state {
+        font-size: 12px;
+        font-weight: 600;
+        color: #4f6a86;
+        min-width: 76px;
+        text-align: right;
+      }
+
+      .email-template-save-state[data-state="saving"] {
+        color: #1f5f9b;
+      }
+
+      .email-template-save-state[data-state="saved"] {
+        color: #2f7a42;
+      }
+
+      .email-template-save-state[data-state="error"] {
+        color: #a53d3d;
       }
 
       .email-template-empty {
@@ -875,6 +910,30 @@
         font-size: 12px;
         color: var(--muted);
       }
+
+      .app-toast {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 60;
+        max-width: 340px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: #143a63;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        box-shadow: 0 10px 24px rgba(20, 58, 99, 0.28);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 140ms ease, transform 140ms ease;
+        pointer-events: none;
+      }
+
+      .app-toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
     </style>
   </head>
   <body>
@@ -893,6 +952,14 @@
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                 <polyline points="21 3 21 9 15 9"></polyline>
+              </svg>
+            </button>
+            <button id="contactViewBtn" class="title-icon-btn active" aria-label="Show contacts" title="Show contacts">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9.5" cy="8" r="3"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 4.13a3 3 0 0 1 0 5.74"></path>
               </svg>
             </button>
             <button id="emailSettingsBtn" class="title-icon-btn" aria-label="Open email templates" title="Open email templates">
@@ -923,12 +990,6 @@
     </div>
 
     <section id="emailTemplatesPage" class="email-templates-page" hidden>
-      <div class="email-templates-header">
-        <h2 class="email-templates-title">Email Templates</h2>
-        <div class="email-templates-actions">
-          <button id="closeEmailTemplatesPageBtn" class="btn" type="button">Back</button>
-        </div>
-      </div>
       <p class="template-note">Tokens: [name], [first_name], [email], [phone], [possibility]</p>
       <div class="email-templates-shell">
         <aside class="email-templates-sidebar">
@@ -941,13 +1002,13 @@
         <section class="email-template-editor-pane">
           <div id="emailTemplateEmpty" class="email-template-empty">Select a template from the left or create a new one.</div>
           <div id="emailTemplateEditor" class="email-template-editor" hidden>
+            <div class="email-template-top-actions">
+              <span id="emailTemplateSaveState" class="email-template-save-state" data-state="saved">Saved</span>
+              <button id="deleteEmailTemplateBtn" class="btn danger" type="button">Delete Template</button>
+            </div>
             <div class="field">
               <label for="emailTemplateNameInput">Template name</label>
               <input id="emailTemplateNameInput" type="text" />
-            </div>
-            <div class="email-template-inline-actions">
-              <button id="saveEmailTemplatesPageBtn" class="btn primary" type="button">Save Template</button>
-              <button id="deleteEmailTemplateBtn" class="btn danger" type="button">Delete Template</button>
             </div>
             <div class="field">
               <label for="emailTemplateSubjectInput">Subject</label>
@@ -1033,6 +1094,8 @@
         </div>
       </div>
     </div>
+
+    <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
 
     <script src="shared/messages.js"></script>
     <script src="shared/config.js"></script>
