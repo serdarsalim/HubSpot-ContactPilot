@@ -26,10 +26,18 @@
     return (text || "").replace(/\s+/g, " ").trim();
   }
 
+  function isDashLikePlaceholder(value) {
+    const text = cleanText(value);
+    if (!text) return false;
+    const compact = text.replace(/[\s|_]+/g, "");
+    if (!compact) return false;
+    return /^[-–—−‐‑‒﹘﹣－]+$/.test(compact);
+  }
+
   function hasMeaningfulCellValue(value) {
     const text = cleanText(value);
     if (!text) return false;
-    if (/^[-–—|_]+$/.test(text)) return false;
+    if (isDashLikePlaceholder(text)) return false;
     const compact = text.replace(/[\s\-–—|_]+/g, "");
     return compact.length > 0;
   }
@@ -210,6 +218,10 @@
 
   function buildContactFromValues(row, values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText) {
     if (!values) return null;
+    const rowValues = Object.values(values);
+    const dashOnlyRow = rowValues.length > 0 && rowValues.every((value) => isDashLikePlaceholder(value));
+    if (dashOnlyRow) return null;
+
     const hasAny = Object.values(values).some((value) => hasMeaningfulCellValue(value));
     if (!hasAny) return null;
 
