@@ -103,11 +103,11 @@
   dom.refreshBtn.addEventListener("click", () => {
     void App.loadContacts({ loadAll: true });
   });
-  dom.csvSelectedBtn.addEventListener("click", App.exportCsvSelected);
-  dom.vcfSelectedBtn.addEventListener("click", App.exportVcfSelected);
-  dom.copyEmailBtn.addEventListener("click", () => {
-    void App.copyEmailSelected();
-  });
+  if (dom.copyEmailBtn) {
+    dom.copyEmailBtn.addEventListener("click", () => {
+      void App.copyEmailSelected();
+    });
+  }
 
   async function init() {
     if (typeof App.initAnalytics === "function") {

@@ -9,9 +9,7 @@ A Chrome extension that adds fast outreach workflows on top of HubSpot contact v
 - Adds one-click row actions for:
   - `Email` (choose a template, open contact, fill HubSpot composer subject/body)
   - `Notes` (view and add notes)
-- Supports selection actions:
-  - Export selected contacts to CSV
-  - Export selected contacts to VCF
+- Supports selection action:
   - Copy selected emails
 - Includes a dedicated full-page Email Templates workspace
 - Includes dark mode support for:
