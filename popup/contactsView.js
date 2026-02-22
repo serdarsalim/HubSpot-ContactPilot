@@ -120,6 +120,7 @@
               if (contactUrl) {
                 return `<td class='${css}'><a href='${App.escapeHtml(contactUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></td>`;
               }
+              return `<td class='${css}'><button type='button' class='name-link-btn row-missing-record-id-link' data-key='${App.escapeHtml(key)}'>${App.escapeHtml(value)}</button></td>`;
             }
 
             return `<td class='${css}'>${App.escapeHtml(value)}</td>`;
@@ -185,7 +186,8 @@
         const contact = displayedByKey.get(key);
         const recordId = App.getRecordIdForContact(contact);
         if (!recordId) {
-          App.setStatus("Could not find Record ID for this row.");
+          App.openRecordIdRequiredDialog();
+          App.setStatus('Missing "Record ID" column. Add it in HubSpot Contacts list columns, then refresh Contact Point.');
           return;
         }
         App.openNotesDialog(contact, recordId);
@@ -198,8 +200,21 @@
         if (!key) return;
         const contact = displayedByKey.get(key);
         if (!contact) return;
+        const recordId = App.getRecordIdForContact(contact);
+        if (!recordId) {
+          App.openRecordIdRequiredDialog();
+          App.setStatus('Missing "Record ID" column. Add it in HubSpot Contacts list columns, then refresh Contact Point.');
+          return;
+        }
 
         App.openEmailTemplatePicker(contact, key);
+      });
+    });
+
+    dom.listEl.querySelectorAll(".row-missing-record-id-link").forEach((button) => {
+      button.addEventListener("click", () => {
+        App.openRecordIdRequiredDialog();
+        App.setStatus('Missing "Record ID" column. Add it in HubSpot Contacts list columns, then refresh Contact Point.');
       });
     });
 

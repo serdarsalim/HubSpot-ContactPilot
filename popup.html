@@ -443,11 +443,33 @@
         font-weight: inherit;
       }
 
+      td.name .name-link-btn {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-weight: inherit;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
       td.name a:hover {
         text-decoration: underline;
       }
 
+      td.name .name-link-btn:hover {
+        text-decoration-thickness: 2px;
+      }
+
       td.name a:focus-visible {
+        outline: 2px solid #0b66c3;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      td.name .name-link-btn:focus-visible {
         outline: 2px solid #0b66c3;
         outline-offset: 2px;
         border-radius: 4px;
@@ -550,6 +572,20 @@
         display: flex;
       }
 
+      .record-id-required-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(13, 25, 38, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1065;
+      }
+
+      .record-id-required-overlay.open {
+        display: flex;
+      }
+
       .template-import-overlay {
         position: fixed;
         inset: 0;
@@ -615,6 +651,23 @@
         border-radius: 14px;
         padding: 14px;
         box-shadow: 0 20px 40px rgba(8, 30, 60, 0.15);
+      }
+
+      .record-id-required-card {
+        width: 560px;
+        max-width: calc(100vw - 32px);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 20px 40px rgba(8, 30, 60, 0.15);
+      }
+
+      .record-id-required-message {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text);
       }
 
       .settings-head {
@@ -1143,6 +1196,7 @@
       body[data-theme="dark"] .email-templates-sidebar,
       body[data-theme="dark"] .notes-card,
       body[data-theme="dark"] .email-template-pick-card,
+      body[data-theme="dark"] .record-id-required-card,
       body[data-theme="dark"] .template-import-card {
         background: var(--card);
         border-color: var(--line);
@@ -1443,6 +1497,20 @@
         <div id="emailTemplatePickList" class="email-template-pick-list"></div>
         <div class="settings-actions">
           <button id="cancelEmailTemplatePickBtn" class="btn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="recordIdRequiredOverlay" class="record-id-required-overlay">
+      <div class="record-id-required-card">
+        <div class="settings-head">
+          <h2>Record ID Required</h2>
+        </div>
+        <p id="recordIdRequiredMessage" class="record-id-required-message">
+          Missing "Record ID" column. In HubSpot Contacts list view (not an individual contact page), add it to table columns, then refresh Contact Point.
+        </p>
+        <div class="settings-actions">
+          <button id="recordIdRequiredCloseBtn" class="btn primary" type="button">Got it</button>
         </div>
       </div>
     </div>

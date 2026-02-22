@@ -59,6 +59,7 @@
     applyTemplateImportBtn: document.getElementById("applyTemplateImportBtn"),
     notesOverlay: document.getElementById("notesOverlay"),
     emailTemplatePickOverlay: document.getElementById("emailTemplatePickOverlay"),
+    recordIdRequiredOverlay: document.getElementById("recordIdRequiredOverlay"),
     notesTitleEl: document.getElementById("notesTitle"),
     notesListEl: document.getElementById("notesList"),
     notesTextInput: document.getElementById("notesTextInput"),
@@ -69,6 +70,8 @@
     emailTemplatePickSearchInput: document.getElementById("emailTemplatePickSearchInput"),
     emailTemplatePickList: document.getElementById("emailTemplatePickList"),
     cancelEmailTemplatePickBtn: document.getElementById("cancelEmailTemplatePickBtn"),
+    recordIdRequiredMessageEl: document.getElementById("recordIdRequiredMessage"),
+    recordIdRequiredCloseBtn: document.getElementById("recordIdRequiredCloseBtn"),
 
     refreshBtn: document.getElementById("refreshBtn"),
     csvSelectedBtn: document.getElementById("csvSelectedBtn"),
@@ -422,6 +425,22 @@
     updateStickyHeadOffset();
   }
 
+  function openRecordIdRequiredDialog() {
+    if (dom.recordIdRequiredMessageEl) {
+      dom.recordIdRequiredMessageEl.textContent =
+        'Missing "Record ID" column. In HubSpot Contacts list view (not an individual contact page), add it to table columns, then refresh Contact Point.';
+    }
+    if (dom.recordIdRequiredOverlay) {
+      dom.recordIdRequiredOverlay.classList.add("open");
+    }
+  }
+
+  function closeRecordIdRequiredDialog() {
+    if (dom.recordIdRequiredOverlay) {
+      dom.recordIdRequiredOverlay.classList.remove("open");
+    }
+  }
+
   App.dom = dom;
   App.constants = {
     SETTINGS_KEY,
@@ -469,6 +488,8 @@
     getContactTokenMap,
     buildContactUrl,
     getSelectedContacts,
-    updateExportActionsVisibility
+    updateExportActionsVisibility,
+    openRecordIdRequiredDialog,
+    closeRecordIdRequiredDialog
   });
 })();

@@ -36,6 +36,12 @@
     });
   }
 
+  if (dom.recordIdRequiredOverlay) {
+    dom.recordIdRequiredOverlay.addEventListener("click", (event) => {
+      if (event.target === dom.recordIdRequiredOverlay) App.closeRecordIdRequiredDialog();
+    });
+  }
+
   if (dom.templateImportOverlay) {
     dom.templateImportOverlay.addEventListener("click", (event) => {
       if (event.target === dom.templateImportOverlay) App.closeTemplateImportReview();
@@ -43,6 +49,7 @@
   }
 
   if (dom.cancelEmailTemplatePickBtn) dom.cancelEmailTemplatePickBtn.addEventListener("click", App.closeEmailTemplatePicker);
+  if (dom.recordIdRequiredCloseBtn) dom.recordIdRequiredCloseBtn.addEventListener("click", App.closeRecordIdRequiredDialog);
   if (dom.emailTemplatePickSearchInput) {
     dom.emailTemplatePickSearchInput.addEventListener("input", (event) => {
       const target = event.target;
