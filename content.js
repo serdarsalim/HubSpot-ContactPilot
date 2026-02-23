@@ -484,7 +484,12 @@
 
   function findActiveContactPhone() {
     const telAnchor = Array.from(document.querySelectorAll("a[href^='tel:']"))
-      .map((el) => cleanText(el.textContent || el.getAttribute("href") || ""))
+      .map((el) => {
+        const href = String(el.getAttribute("href") || "");
+        const hrefPhone = href.replace(/^tel:/i, "").trim();
+        const textPhone = cleanText(el.textContent || "");
+        return cleanText(textPhone || hrefPhone);
+      })
       .find(Boolean);
     if (telAnchor) return telAnchor;
 

@@ -617,6 +617,16 @@
         word-break: break-word;
       }
 
+      .active-tab-phone-link {
+        color: #0b66c3;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .active-tab-phone-link:hover {
+        text-decoration: underline;
+      }
+
       .active-tab-actions {
         display: flex;
         gap: 8px;
@@ -1326,6 +1336,10 @@
         background: #1a2a3e;
         border-color: #334960;
         color: var(--text);
+      }
+
+      body[data-theme="dark"] .active-tab-phone-link {
+        color: #82bdff;
       }
 
       body[data-theme="dark"] .email-template-list-btn.active {

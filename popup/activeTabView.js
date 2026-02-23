@@ -55,6 +55,12 @@
     el.textContent = next || "-";
   }
 
+  function normalizePhoneDisplay(value) {
+    return String(value || "")
+      .replace(/^tel:/i, "")
+      .trim();
+  }
+
   function renderActiveTabContext() {
     const context = state.activeTabContext;
     const contact = context?.contact || null;
@@ -67,10 +73,19 @@
 
     const emailCol = App.findEmailColumn();
     const emailValue = contact ? String(contact.values?.[emailCol?.id || "email"] || contact.values?.email || "") : "";
-    const phoneValue = contact ? String(contact.values?.[state.phoneColumnId || "phone"] || contact.values?.phone || "") : "";
+    const phoneRawValue = contact ? String(contact.values?.[state.phoneColumnId || "phone"] || contact.values?.phone || "") : "";
+    const phoneValue = normalizePhoneDisplay(phoneRawValue);
 
     setText(dom.activeTabEmailEl, emailValue);
-    setText(dom.activeTabPhoneEl, phoneValue);
+    if (dom.activeTabPhoneEl) {
+      if (contact?.waUrl) {
+        dom.activeTabPhoneEl.innerHTML = `<a class='active-tab-phone-link' href='${App.escapeHtml(contact.waUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(
+          phoneValue || "Open WhatsApp"
+        )}</a>`;
+      } else {
+        dom.activeTabPhoneEl.textContent = phoneValue || "-";
+      }
+    }
 
     const isContact = kind === "contact" && !!contact;
     if (dom.activeTabEmailActionBtn) dom.activeTabEmailActionBtn.disabled = !isContact;
