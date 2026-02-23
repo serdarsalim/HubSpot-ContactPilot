@@ -4,7 +4,6 @@
   const MT = App.messageTypes;
   const timing = App.timing.popup;
   const BODY_EDITOR_ID = "emailTemplateBodyInput";
-  const TEMPLATE_PICK_VISIBLE_MAX = 5;
   const TINYMCE_TOOLBAR_ORDER = [
     "blocks",
     "bold italic underline strikethrough",
@@ -346,7 +345,6 @@
           return name.includes(query) || subject.includes(query);
         })
       : templates;
-    const visibleTemplates = matchingTemplates.slice(0, TEMPLATE_PICK_VISIBLE_MAX);
     if (!templates.length) {
       dom.emailTemplatePickList.innerHTML = "<div class='email-template-empty'>No templates found. Add one via the email icon.</div>";
       return;
@@ -356,7 +354,7 @@
       return;
     }
 
-    dom.emailTemplatePickList.innerHTML = visibleTemplates
+    dom.emailTemplatePickList.innerHTML = matchingTemplates
       .map((template) => {
         const preview = templatePreviewText(template);
         const isAppliedForContact = App.hasTemplateApplied("email", state.emailTemplatePickState.key, template.id);

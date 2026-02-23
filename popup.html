@@ -256,6 +256,34 @@
         gap: 12px;
       }
 
+      .status-search {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .status-search-input {
+        width: 200px;
+        max-width: 100%;
+        border: 1px solid #c6d6e7;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-family: inherit;
+        color: var(--text);
+        background: #ffffff;
+      }
+
+      .status-search-input::placeholder {
+        color: #6a7f95;
+      }
+
+      .status-search-input:focus {
+        outline: 2px solid #0b66c3;
+        outline-offset: 1px;
+        border-color: #0b66c3;
+      }
+
       .status-actions[hidden] {
         display: none;
       }
@@ -746,11 +774,15 @@
       .email-template-pick-card {
         width: 560px;
         max-width: calc(100vw - 32px);
+        max-height: calc(100vh - 32px);
         background: var(--card);
         border: 1px solid var(--line);
         border-radius: 14px;
         padding: 14px;
         box-shadow: 0 20px 40px rgba(8, 30, 60, 0.15);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
       }
 
       .record-id-required-card {
@@ -1167,13 +1199,28 @@
       }
 
       .email-template-pick-list {
-        height: 410px;
-        max-height: 410px;
+        height: auto;
+        max-height: min(410px, calc(100vh - 220px));
         overflow-y: auto;
         border: 1px solid #e5edf5;
         border-radius: 10px;
         background: #f8fbff;
         padding: 8px;
+        scrollbar-width: thin;
+        scrollbar-color: #9fb4ca transparent;
+      }
+
+      .email-template-pick-list::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .email-template-pick-list::-webkit-scrollbar-thumb {
+        background: #9fb4ca;
+        border-radius: 999px;
+      }
+
+      .email-template-pick-list::-webkit-scrollbar-track {
+        background: transparent;
       }
 
       .email-template-pick-search {
@@ -1383,6 +1430,21 @@
         color: #d9e7f8;
       }
 
+      body[data-theme="dark"] .status-search-input {
+        background: #1a2a3f;
+        border-color: #486686;
+        color: #d8e6f8;
+      }
+
+      body[data-theme="dark"] .status-search-input::placeholder {
+        color: #95aec9;
+      }
+
+      body[data-theme="dark"] .status-search-input:focus {
+        border-color: #7fb4ef;
+        outline-color: #7fb4ef;
+      }
+
       body[data-theme="dark"] .email-template-pick-search::placeholder {
         color: #94abc7;
       }
@@ -1534,6 +1596,15 @@
           <span id="statusText" class="status-text">Loading contacts...</span>
           <span id="statusActions" class="status-actions" hidden>
             <button id="copyEmailBtn" class="status-action" type="button">Copy Email</button>
+          </span>
+          <span class="status-search">
+            <input
+              id="contactsSearchInput"
+              class="status-search-input"
+              type="search"
+              placeholder="Search contacts..."
+              aria-label="Search contacts table"
+            />
           </span>
         </div>
       </div>

@@ -112,6 +112,14 @@
       App.renderWhatsappTemplatePickerOptions();
     });
   }
+  if (dom.contactsSearchInput) {
+    dom.contactsSearchInput.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.contactsSearchQuery = String(target.value || "");
+      App.renderContacts();
+    });
+  }
 
   if (dom.emailTemplatePickList) {
     dom.emailTemplatePickList.addEventListener("click", (event) => {

@@ -59,7 +59,7 @@
     App.updateExportActionsVisibility();
 
     if (!filteredContacts.length) {
-      if (state.currentContacts.length && App.getFilterWord()) {
+      if (state.currentContacts.length && (App.getFilterWord() || App.getContactSearchQuery())) {
         App.setStatus("No contacts match the current filters.");
         return;
       }

@@ -35,6 +35,7 @@
     statusEl: document.getElementById("status"),
     statusTextEl: document.getElementById("statusText"),
     statusActionsEl: document.getElementById("statusActions"),
+    contactsSearchInput: document.getElementById("contactsSearchInput"),
     mainPageEl: document.getElementById("mainPage"),
     activeTabPageEl: document.getElementById("activeTabPage"),
     emailTemplatesPageEl: document.getElementById("emailTemplatesPage"),
@@ -206,6 +207,7 @@
       contact: null,
       query: ""
     },
+    contactsSearchQuery: "",
     templateUsageByContact: {}
   };
   let templateUsageSaveTimerId = null;
@@ -423,13 +425,20 @@
     return getFilterWords()[0] || "";
   }
 
+  function getContactSearchQuery() {
+    return String(state.contactsSearchQuery || "").trim().toLowerCase();
+  }
+
   function getFilteredContacts(source = state.currentContacts) {
     const filterWords = getFilterWords();
-    if (!filterWords.length) return [...source];
+    const searchQuery = getContactSearchQuery();
+    if (!filterWords.length && !searchQuery) return [...source];
 
     return source.filter((contact) => {
       const rowText = Object.values(contact.values || {}).join(" ").toLowerCase();
-      return !filterWords.some((word) => rowText.includes(word));
+      if (filterWords.some((word) => rowText.includes(word))) return false;
+      if (!searchQuery) return true;
+      return rowText.includes(searchQuery);
     });
   }
 
@@ -676,6 +685,7 @@
     setContactsLoadingState,
     contactKey,
     getFilterWord,
+    getContactSearchQuery,
     getFilteredContacts,
     getVisibleColumns,
     mergeColumnSettings,
