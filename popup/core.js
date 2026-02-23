@@ -37,6 +37,7 @@
     mainPageEl: document.getElementById("mainPage"),
     emailTemplatesPageEl: document.getElementById("emailTemplatesPage"),
     whatsappTemplatesPageEl: document.getElementById("whatsappTemplatesPage"),
+    noteTemplatesPageEl: document.getElementById("noteTemplatesPage"),
     stickyHeadEl: document.getElementById("stickyHead"),
     listEl: document.getElementById("list"),
 
@@ -45,6 +46,7 @@
     contactViewBtn: document.getElementById("contactViewBtn"),
     emailSettingsBtn: document.getElementById("emailSettingsBtn"),
     whatsappSettingsBtn: document.getElementById("whatsappSettingsBtn"),
+    noteSettingsBtn: document.getElementById("noteSettingsBtn"),
     cancelSettingsBtn: document.getElementById("cancelSettingsBtn"),
     saveSettingsBtn: document.getElementById("saveSettingsBtn"),
     settingsPageEl: document.getElementById("settingsPage"),
@@ -65,6 +67,7 @@
     recordIdRequiredOverlay: document.getElementById("recordIdRequiredOverlay"),
     notesTitleEl: document.getElementById("notesTitle"),
     notesListEl: document.getElementById("notesList"),
+    notesTemplateSelect: document.getElementById("notesTemplateSelect"),
     notesTextInput: document.getElementById("notesTextInput"),
     closeNotesBtn: document.getElementById("closeNotesBtn"),
     cancelNotesBtn: document.getElementById("cancelNotesBtn"),
@@ -106,6 +109,14 @@
     whatsappTemplateBodyInput: document.getElementById("whatsappTemplateBodyInput"),
     whatsappTemplateSaveStateEl: document.getElementById("whatsappTemplateSaveState"),
     deleteWhatsappTemplateBtn: document.getElementById("deleteWhatsappTemplateBtn"),
+    noteTemplatesListEl: document.getElementById("noteTemplatesList"),
+    addNoteTemplateBtn: document.getElementById("addNoteTemplateBtn"),
+    noteTemplateEmptyEl: document.getElementById("noteTemplateEmpty"),
+    noteTemplateEditorEl: document.getElementById("noteTemplateEditor"),
+    noteTemplateNameInput: document.getElementById("noteTemplateNameInput"),
+    noteTemplateBodyInput: document.getElementById("noteTemplateBodyInput"),
+    noteTemplateSaveStateEl: document.getElementById("noteTemplateSaveState"),
+    deleteNoteTemplateBtn: document.getElementById("deleteNoteTemplateBtn"),
     appToastEl: document.getElementById("appToast")
   };
   let toastTimerId = null;
@@ -125,6 +136,11 @@
     name: "Template 1",
     body: "Hi [name],"
   };
+  const DEFAULT_NOTE_TEMPLATE = {
+    id: "note_template_default",
+    name: "Template 1",
+    body: ""
+  };
   const DEFAULT_SETTINGS = {
     themeMode: "light",
     countryPrefix: "60",
@@ -133,7 +149,8 @@
     rowFilterWord: "",
     visibleColumns: {},
     emailTemplates: [DEFAULT_EMAIL_TEMPLATE],
-    whatsappTemplates: [DEFAULT_WHATSAPP_TEMPLATE]
+    whatsappTemplates: [DEFAULT_WHATSAPP_TEMPLATE],
+    noteTemplates: [DEFAULT_NOTE_TEMPLATE]
   };
 
   const state = {
@@ -159,6 +176,9 @@
     whatsappTemplatesDraft: [],
     activeWhatsappTemplateId: "",
     syncingWhatsappTemplateForm: false,
+    noteTemplatesDraft: [],
+    activeNoteTemplateId: "",
+    syncingNoteTemplateForm: false,
     emailTemplatePickState: {
       key: "",
       contact: null,
@@ -262,6 +282,29 @@
 
     if (!templates.length) {
       templates.push({ ...DEFAULT_WHATSAPP_TEMPLATE });
+    }
+    return templates;
+  }
+
+  function normalizeNoteTemplates(rawTemplates) {
+    const templates = [];
+    const seen = new Set();
+    const source = Array.isArray(rawTemplates) ? rawTemplates : [];
+
+    for (const item of source) {
+      const id = String(item?.id || "").trim() || makeTemplateId();
+      if (seen.has(id)) continue;
+      seen.add(id);
+
+      templates.push({
+        id,
+        name: String(item?.name || "").trim() || "Untitled",
+        body: String(item?.body || "").trim()
+      });
+    }
+
+    if (!templates.length) {
+      templates.push({ ...DEFAULT_NOTE_TEMPLATE });
     }
     return templates;
   }
@@ -584,6 +627,7 @@
     LEGACY_NOTE_TEXT,
     DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_WHATSAPP_TEMPLATE,
+    DEFAULT_NOTE_TEMPLATE,
     DEFAULT_SETTINGS
   };
   App.messageTypes = MESSAGE_TYPES;
@@ -599,6 +643,7 @@
     makeTemplateId,
     normalizeEmailTemplates,
     normalizeWhatsappTemplates,
+    normalizeNoteTemplates,
     templateTokenKey,
     applyTokens,
     normalizeThemeMode,

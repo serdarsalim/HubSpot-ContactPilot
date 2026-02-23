@@ -7,6 +7,7 @@
   if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.openContactsView);
   if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.toggleEmailSettings);
   if (dom.whatsappSettingsBtn) dom.whatsappSettingsBtn.addEventListener("click", App.toggleWhatsappSettings);
+  if (dom.noteSettingsBtn) dom.noteSettingsBtn.addEventListener("click", App.toggleNoteSettings);
   dom.cancelSettingsBtn.addEventListener("click", App.closeSettings);
   dom.saveSettingsBtn.addEventListener("click", App.saveSettings);
 
@@ -41,6 +42,23 @@
       if (!templateId) return;
       state.activeWhatsappTemplateId = templateId;
       App.renderWhatsappTemplatesPage();
+    });
+  }
+
+  if (dom.addNoteTemplateBtn) {
+    dom.addNoteTemplateBtn.addEventListener("click", App.addNoteTemplateDraft);
+  }
+
+  if (dom.noteTemplatesListEl) {
+    dom.noteTemplatesListEl.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const rowButton = target.closest("[data-template-id]");
+      if (!(rowButton instanceof HTMLElement)) return;
+      const templateId = String(rowButton.getAttribute("data-template-id") || "");
+      if (!templateId) return;
+      state.activeNoteTemplateId = templateId;
+      App.renderNoteTemplatesPage();
     });
   }
 
@@ -141,11 +159,19 @@
     dom.whatsappTemplateNameInput.addEventListener("blur", () => void App.flushWhatsappTemplateAutosave({ showToast: false }));
   if (dom.whatsappTemplateBodyInput)
     dom.whatsappTemplateBodyInput.addEventListener("blur", () => void App.flushWhatsappTemplateAutosave({ showToast: false }));
+  if (dom.deleteNoteTemplateBtn) dom.deleteNoteTemplateBtn.addEventListener("click", App.deleteActiveNoteTemplateDraft);
+  if (dom.noteTemplateNameInput) dom.noteTemplateNameInput.addEventListener("input", App.upsertActiveNoteTemplateFromForm);
+  if (dom.noteTemplateBodyInput) dom.noteTemplateBodyInput.addEventListener("input", App.upsertActiveNoteTemplateFromForm);
+  if (dom.noteTemplateNameInput) dom.noteTemplateNameInput.addEventListener("blur", () => void App.flushNoteTemplateAutosave({ showToast: false }));
+  if (dom.noteTemplateBodyInput) dom.noteTemplateBodyInput.addEventListener("blur", () => void App.flushNoteTemplateAutosave({ showToast: false }));
 
   if (dom.notesOverlay) {
     dom.notesOverlay.addEventListener("click", (event) => {
       if (event.target === dom.notesOverlay) App.closeNotesDialog();
     });
+  }
+  if (dom.notesTemplateSelect) {
+    dom.notesTemplateSelect.addEventListener("change", App.applySelectedNoteTemplateToInput);
   }
 
   window.addEventListener("resize", App.updateStickyHeadOffset);

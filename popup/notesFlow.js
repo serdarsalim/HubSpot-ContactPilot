@@ -37,6 +37,9 @@
 
     if (dom.notesTitleEl) dom.notesTitleEl.textContent = `Notes - ${state.notesDialogState.contactName}`;
     if (dom.notesTextInput) dom.notesTextInput.value = state.settings.noteTemplate || "";
+    if (typeof App.renderNotesTemplateSelectOptions === "function") {
+      App.renderNotesTemplateSelectOptions("");
+    }
 
     setNotesDialogBusy(false);
     renderNotesHistory();
@@ -96,6 +99,7 @@
     state.notesDialogState.notes = [text, ...state.notesDialogState.notes];
     renderNotesHistory();
     if (dom.notesTextInput) dom.notesTextInput.value = state.settings.noteTemplate || "";
+    if (dom.notesTemplateSelect) dom.notesTemplateSelect.value = "";
     App.setStatus("Note logged.");
     if (typeof App.trackEvent === "function") {
       App.trackEvent("note_created", {

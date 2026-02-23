@@ -771,6 +771,17 @@
         font-size: 14px;
       }
 
+      .field select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px;
+        font-size: 14px;
+        background: var(--card);
+        color: var(--text);
+      }
+
       .field textarea {
         width: 100%;
         box-sizing: border-box;
@@ -1337,6 +1348,7 @@
       }
 
       body[data-theme="dark"] .field input[type="text"],
+      body[data-theme="dark"] .field select,
       body[data-theme="dark"] .field textarea {
         background: #1a2a3e;
         border-color: #456181;
@@ -1398,6 +1410,14 @@
                 <path d="M21 12a8.5 8.5 0 0 1-8.5 8.5H8l-4 3 1.5-4.5A8.5 8.5 0 1 1 21 12z"></path>
                 <path d="M8.5 10.5h7"></path>
                 <path d="M8.5 14h5"></path>
+              </svg>
+            </button>
+            <button id="noteSettingsBtn" class="title-icon-btn" aria-label="Open note templates" title="Open note templates">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 3h12l4 4v14H4z"></path>
+                <path d="M16 3v4h4"></path>
+                <path d="M8 12h8"></path>
+                <path d="M8 16h8"></path>
               </svg>
             </button>
             <button id="settingsBtn" class="title-icon-btn" aria-label="Open settings" title="Open settings">
@@ -1491,6 +1511,35 @@
       </div>
     </section>
 
+    <section id="noteTemplatesPage" class="email-templates-page" hidden>
+      <div class="template-note-spacer" aria-hidden="true"></div>
+      <div class="email-templates-shell">
+        <aside class="email-templates-sidebar">
+          <div class="email-templates-sidebar-head">
+            <button id="addNoteTemplateBtn" class="btn primary email-add-template-btn" type="button">Add Template</button>
+          </div>
+          <div id="noteTemplatesList" class="email-templates-list"></div>
+        </aside>
+        <section class="email-template-editor-pane">
+          <div id="noteTemplateEmpty" class="email-template-empty">Select a template from the left or create a new one.</div>
+          <div id="noteTemplateEditor" class="email-template-editor" hidden>
+            <div class="email-template-top-actions">
+              <span id="noteTemplateSaveState" class="email-template-save-state" data-state="saved">Saved</span>
+              <button id="deleteNoteTemplateBtn" class="btn danger" type="button">Delete Template</button>
+            </div>
+            <div class="field">
+              <label for="noteTemplateNameInput">Template name</label>
+              <input id="noteTemplateNameInput" type="text" />
+            </div>
+            <div class="field field-grow">
+              <label for="noteTemplateBodyInput">Note body</label>
+              <textarea id="noteTemplateBodyInput"></textarea>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
     <section id="settingsPage" class="settings-page" hidden>
       <div class="settings-card">
         <div class="settings-head">
@@ -1548,6 +1597,11 @@
 
         <div id="notesList" class="notes-list">
           <div class="notes-empty">Loading notes...</div>
+        </div>
+
+        <div class="field">
+          <label for="notesTemplateSelect">Insert template</label>
+          <select id="notesTemplateSelect"></select>
         </div>
 
         <div class="field">
@@ -1643,6 +1697,7 @@
     <script src="popup/settings.js"></script>
     <script src="popup/emailTemplates.js"></script>
     <script src="popup/whatsappTemplates.js"></script>
+    <script src="popup/noteTemplates.js"></script>
     <script src="popup/notesFlow.js"></script>
     <script src="popup/contactsView.js"></script>
     <script src="popup/exportUtils.js"></script>
