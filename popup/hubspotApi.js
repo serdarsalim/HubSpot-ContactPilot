@@ -104,6 +104,12 @@
     throw new Error(lastError || "Could not read notes from HubSpot tab.");
   }
 
+  function isMissingReceiverError(error) {
+    const text = String(error || "").toLowerCase();
+    return text.includes("receiving end does not exist") || text.includes("could not establish connection");
+  }
+
+
   function extractContactRecordIdFromUrl(url) {
     const match = String(url || "").match(/\/record\/0-1\/(\d+)/i);
     return match ? match[1] : "";
@@ -139,22 +145,34 @@
       throw new Error("Invalid Record ID.");
     }
 
+    const openFreshContactTabAndWork = async () => {
+      const url = `https://app.hubspot.com/contacts/${portalId}/record/0-1/${cleanId}?interaction=note`;
+      const openedTab = await chrome.tabs.create({ url, active: false });
+      if (!openedTab || typeof openedTab.id !== "number") {
+        throw new Error("Could not open HubSpot contact tab.");
+      }
+
+      await waitForTabComplete(openedTab.id);
+      await sleep(timing.contactTabPostLoadDelayMs);
+      return work(openedTab.id);
+    };
+
     const existingTab = await findExistingContactTab(cleanId, portalId);
     if (existingTab && typeof existingTab.id === "number") {
       await waitForTabComplete(existingTab.id);
       await sleep(timing.contactTabPostLoadDelayMs);
-      return work(existingTab.id);
+      try {
+        return await work(existingTab.id);
+      } catch (error) {
+        if (!isMissingReceiverError(error)) {
+          throw error;
+        }
+        // Existing tab can miss content-script receiver (e.g. stale tab). Retry on a fresh contact tab.
+        return openFreshContactTabAndWork();
+      }
     }
 
-    const url = `https://app.hubspot.com/contacts/${portalId}/record/0-1/${cleanId}?interaction=note`;
-    const openedTab = await chrome.tabs.create({ url, active: false });
-    if (!openedTab || typeof openedTab.id !== "number") {
-      throw new Error("Could not open HubSpot contact tab.");
-    }
-
-    await waitForTabComplete(openedTab.id);
-    await sleep(timing.contactTabPostLoadDelayMs);
-    return work(openedTab.id);
+    return openFreshContactTabAndWork();
   }
 
   async function createSingleHubSpotNote(recordId, noteBody, portalId) {
