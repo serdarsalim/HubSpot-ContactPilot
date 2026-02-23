@@ -20,9 +20,32 @@
       .join("");
   }
 
-  function setNotesDialogBusy(busy) {
-    if (dom.saveNoteBtn) dom.saveNoteBtn.disabled = !!busy;
-    if (dom.notesTextInput) dom.notesTextInput.disabled = !!busy;
+  function setNotesDialogBusy(busy, options = {}) {
+    const isBusy = !!busy;
+    const busyLabel = String(options.busyLabel || "Sending...");
+
+    if (dom.saveNoteBtn) {
+      if (!dom.saveNoteBtn.dataset.defaultLabel) {
+        dom.saveNoteBtn.dataset.defaultLabel = cleanButtonText(dom.saveNoteBtn.textContent) || "Save Note";
+      }
+      dom.saveNoteBtn.disabled = isBusy;
+      dom.saveNoteBtn.classList.toggle("is-busy", isBusy);
+      dom.saveNoteBtn.textContent = isBusy ? busyLabel : dom.saveNoteBtn.dataset.defaultLabel;
+      if (isBusy) {
+        dom.saveNoteBtn.setAttribute("aria-busy", "true");
+      } else {
+        dom.saveNoteBtn.removeAttribute("aria-busy");
+      }
+    }
+
+    if (dom.notesTextInput) dom.notesTextInput.disabled = isBusy;
+    if (dom.notesTemplateSelect) dom.notesTemplateSelect.disabled = isBusy;
+    if (dom.cancelNotesBtn) dom.cancelNotesBtn.disabled = isBusy;
+    if (dom.closeNotesBtn) dom.closeNotesBtn.disabled = isBusy;
+  }
+
+  function cleanButtonText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
   }
 
   function openNotesDialog(contact, recordId) {
@@ -87,12 +110,20 @@
       return;
     }
 
-    setNotesDialogBusy(true);
-    const result = await App.createHubSpotNotes([recordId], text);
-    setNotesDialogBusy(false);
+    if (dom.saveNoteBtn?.disabled) return;
 
-    if (!result.ok) {
-      App.setStatus(result.error || "Could not create note.");
+    setNotesDialogBusy(true, { busyLabel: "Sending..." });
+    App.setStatus(`Sending note for ${state.notesDialogState.contactName || "contact"}...`);
+
+    let result = null;
+    try {
+      result = await App.createHubSpotNotes([recordId], text);
+    } finally {
+      setNotesDialogBusy(false);
+    }
+
+    if (!result?.ok) {
+      App.setStatus(result?.error || "Could not create note.");
       return;
     }
 
@@ -100,7 +131,7 @@
     renderNotesHistory();
     if (dom.notesTextInput) dom.notesTextInput.value = state.settings.noteTemplate || "";
     if (dom.notesTemplateSelect) dom.notesTemplateSelect.value = "";
-    App.setStatus("Note logged.");
+    App.setStatus("Note sent and logged.");
     if (typeof App.trackEvent === "function") {
       App.trackEvent("note_created", {
         note_length: text.length
