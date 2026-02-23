@@ -140,7 +140,11 @@
                 aria-label='WhatsApp'
                 title='WhatsApp'
               >
-                💬
+                <svg viewBox='0 0 24 24' aria-hidden='true'>
+                  <path d='M21 12a8.5 8.5 0 0 1-8.5 8.5H8l-4 3 1.5-4.5A8.5 8.5 0 1 1 21 12z'></path>
+                  <path d='M8.5 10.5h7'></path>
+                  <path d='M8.5 14h5'></path>
+                </svg>
               </button>
               <button
                 type='button'
@@ -149,7 +153,10 @@
                 aria-label='Email'
                 title='Email'
               >
-                ✉
+                <svg viewBox='0 0 24 24' aria-hidden='true'>
+                  <rect x='3.5' y='6.5' width='17' height='11' rx='2'></rect>
+                  <path d='M4 8l8 5 8-5'></path>
+                </svg>
               </button>
               <button
                 type='button'
@@ -158,7 +165,10 @@
                 aria-label='Notes'
                 title='Notes'
               >
-                📝
+                <svg viewBox='0 0 24 24' aria-hidden='true'>
+                  <path d='M4 20h4l10-10-4-4L4 16v4z'></path>
+                  <path d='M12 8l4 4'></path>
+                </svg>
               </button>
             </span>
           </td>

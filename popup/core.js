@@ -112,6 +112,7 @@
 
   const SETTINGS_KEY = "popupSettings";
   const EMAIL_TEMPLATES_LOCAL_KEY = "popupEmailTemplates";
+  const TEMPLATE_USAGE_LOCAL_KEY = "popupTemplateUsageByContact";
   const LEGACY_NOTE_TEXT = "Reached out on WhatsApp";
   const DEFAULT_EMAIL_TEMPLATE = {
     id: "template_default",
@@ -170,6 +171,7 @@
     },
     templateUsageByContact: {}
   };
+  let templateUsageSaveTimerId = null;
 
   function columnType(col) {
     if (col.id === state.phoneColumnId) return "phone";
@@ -476,6 +478,53 @@
     return String(kind || "").toLowerCase() === "whatsapp" ? "whatsapp" : "email";
   }
 
+  function normalizeTemplateUsageMap(rawUsage) {
+    if (!rawUsage || typeof rawUsage !== "object") return {};
+    const normalized = {};
+
+    for (const [contactKeyInput, usageInput] of Object.entries(rawUsage)) {
+      const contactKeyClean = String(contactKeyInput || "").trim();
+      if (!contactKeyClean) continue;
+      const usage = usageInput && typeof usageInput === "object" ? usageInput : {};
+      const emailUsage = usage.email && typeof usage.email === "object" ? usage.email : {};
+      const whatsappUsage = usage.whatsapp && typeof usage.whatsapp === "object" ? usage.whatsapp : {};
+
+      const cleanEmail = {};
+      for (const [templateIdInput, usedInput] of Object.entries(emailUsage)) {
+        const templateId = String(templateIdInput || "").trim();
+        if (!templateId || usedInput !== true) continue;
+        cleanEmail[templateId] = true;
+      }
+
+      const cleanWhatsapp = {};
+      for (const [templateIdInput, usedInput] of Object.entries(whatsappUsage)) {
+        const templateId = String(templateIdInput || "").trim();
+        if (!templateId || usedInput !== true) continue;
+        cleanWhatsapp[templateId] = true;
+      }
+
+      normalized[contactKeyClean] = {
+        email: cleanEmail,
+        whatsapp: cleanWhatsapp
+      };
+    }
+
+    return normalized;
+  }
+
+  function scheduleTemplateUsagePersist() {
+    if (templateUsageSaveTimerId) {
+      clearTimeout(templateUsageSaveTimerId);
+      templateUsageSaveTimerId = null;
+    }
+    templateUsageSaveTimerId = setTimeout(() => {
+      templateUsageSaveTimerId = null;
+      const payload = normalizeTemplateUsageMap(state.templateUsageByContact);
+      state.templateUsageByContact = payload;
+      void chrome.storage.local.set({ [TEMPLATE_USAGE_LOCAL_KEY]: payload });
+    }, 180);
+  }
+
   function getTemplateUsageForContact(contactKeyInput) {
     const key = String(contactKeyInput || "").trim();
     if (!key) return null;
@@ -494,6 +543,7 @@
     if (!contactUsage || !templateId) return;
     const usageKind = normalizeTemplateUsageKind(kind);
     contactUsage[usageKind][templateId] = true;
+    scheduleTemplateUsagePersist();
   }
 
   function hasTemplateApplied(kind, contactKeyInput, templateIdInput) {
@@ -530,6 +580,7 @@
   App.constants = {
     SETTINGS_KEY,
     EMAIL_TEMPLATES_LOCAL_KEY,
+    TEMPLATE_USAGE_LOCAL_KEY,
     LEGACY_NOTE_TEXT,
     DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_WHATSAPP_TEMPLATE,
@@ -575,6 +626,7 @@
     getContactTokenMap,
     buildContactUrl,
     getSelectedContacts,
+    normalizeTemplateUsageMap,
     markTemplateApplied,
     hasTemplateApplied,
     updateExportActionsVisibility,

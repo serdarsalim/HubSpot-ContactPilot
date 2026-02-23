@@ -465,7 +465,7 @@
   async function loadSettings() {
     const [syncResult, localResult] = await Promise.all([
       chrome.storage.sync.get(constants.SETTINGS_KEY),
-      chrome.storage.local.get(constants.EMAIL_TEMPLATES_LOCAL_KEY)
+      chrome.storage.local.get([constants.EMAIL_TEMPLATES_LOCAL_KEY, constants.TEMPLATE_USAGE_LOCAL_KEY])
     ]);
     const saved = syncResult[constants.SETTINGS_KEY];
     const {
@@ -474,9 +474,11 @@
       ...savedWithoutLegacy
     } = saved || {};
     const localTemplates = localResult[constants.EMAIL_TEMPLATES_LOCAL_KEY];
+    const savedTemplateUsage = localResult[constants.TEMPLATE_USAGE_LOCAL_KEY];
     const hasLocalTemplates = Array.isArray(localTemplates);
     const emailTemplates = App.normalizeEmailTemplates(hasLocalTemplates ? localTemplates : legacySyncTemplates);
     const whatsappTemplates = App.normalizeWhatsappTemplates(savedWithoutLegacy.whatsappTemplates);
+    state.templateUsageByContact = App.normalizeTemplateUsageMap(savedTemplateUsage);
     state.settings = {
       ...constants.DEFAULT_SETTINGS,
       ...savedWithoutLegacy,
