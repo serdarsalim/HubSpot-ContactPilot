@@ -5,6 +5,7 @@
   dom.settingsBtn.addEventListener("click", App.toggleSettings);
   if (dom.themeToggleBtn) dom.themeToggleBtn.addEventListener("click", App.toggleTheme);
   if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.openContactsView);
+  if (dom.activeTabBtn) dom.activeTabBtn.addEventListener("click", App.toggleActiveTab);
   if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.toggleEmailSettings);
   if (dom.whatsappSettingsBtn) dom.whatsappSettingsBtn.addEventListener("click", App.toggleWhatsappSettings);
   if (dom.noteSettingsBtn) dom.noteSettingsBtn.addEventListener("click", App.toggleNoteSettings);
@@ -190,6 +191,20 @@
     dom.copyEmailBtn.addEventListener("click", () => {
       void App.copyEmailSelected();
     });
+  }
+  if (dom.activeTabRefreshBtn) {
+    dom.activeTabRefreshBtn.addEventListener("click", () => {
+      void App.loadActiveTabContext();
+    });
+  }
+  if (dom.activeTabEmailActionBtn) {
+    dom.activeTabEmailActionBtn.addEventListener("click", App.openActiveTabEmailAction);
+  }
+  if (dom.activeTabWhatsappActionBtn) {
+    dom.activeTabWhatsappActionBtn.addEventListener("click", App.openActiveTabWhatsappAction);
+  }
+  if (dom.activeTabNotesActionBtn) {
+    dom.activeTabNotesActionBtn.addEventListener("click", App.openActiveTabNotesAction);
   }
 
   async function init() {

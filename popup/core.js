@@ -3,6 +3,7 @@
   const shared = globalThis.ContactPilotShared || {};
   const MESSAGE_TYPES = shared.MESSAGE_TYPES || Object.freeze({
     GET_CONTACTS: "GET_CONTACTS",
+    GET_ACTIVE_TAB_CONTEXT: "GET_ACTIVE_TAB_CONTEXT",
     GET_PORTAL_ID: "GET_PORTAL_ID",
     CREATE_NOTE_ON_PAGE: "CREATE_NOTE_ON_PAGE",
     GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
@@ -35,6 +36,7 @@
     statusTextEl: document.getElementById("statusText"),
     statusActionsEl: document.getElementById("statusActions"),
     mainPageEl: document.getElementById("mainPage"),
+    activeTabPageEl: document.getElementById("activeTabPage"),
     emailTemplatesPageEl: document.getElementById("emailTemplatesPage"),
     whatsappTemplatesPageEl: document.getElementById("whatsappTemplatesPage"),
     noteTemplatesPageEl: document.getElementById("noteTemplatesPage"),
@@ -44,6 +46,7 @@
     settingsBtn: document.getElementById("settingsBtn"),
     themeToggleBtn: document.getElementById("themeToggleBtn"),
     contactViewBtn: document.getElementById("contactViewBtn"),
+    activeTabBtn: document.getElementById("activeTabBtn"),
     emailSettingsBtn: document.getElementById("emailSettingsBtn"),
     whatsappSettingsBtn: document.getElementById("whatsappSettingsBtn"),
     noteSettingsBtn: document.getElementById("noteSettingsBtn"),
@@ -87,6 +90,17 @@
     csvSelectedBtn: document.getElementById("csvSelectedBtn"),
     vcfSelectedBtn: document.getElementById("vcfSelectedBtn"),
     copyEmailBtn: document.getElementById("copyEmailBtn"),
+    activeTabRefreshBtn: document.getElementById("activeTabRefreshBtn"),
+    activeTabStatusEl: document.getElementById("activeTabStatus"),
+    activeTabNameEl: document.getElementById("activeTabName"),
+    activeTabKindEl: document.getElementById("activeTabKind"),
+    activeTabRecordIdEl: document.getElementById("activeTabRecordId"),
+    activeTabPortalIdEl: document.getElementById("activeTabPortalId"),
+    activeTabEmailEl: document.getElementById("activeTabEmail"),
+    activeTabPhoneEl: document.getElementById("activeTabPhone"),
+    activeTabEmailActionBtn: document.getElementById("activeTabEmailActionBtn"),
+    activeTabWhatsappActionBtn: document.getElementById("activeTabWhatsappActionBtn"),
+    activeTabNotesActionBtn: document.getElementById("activeTabNotesActionBtn"),
 
     countryPrefixInput: document.getElementById("countryPrefixInput"),
     messageTemplateInput: document.getElementById("messageTemplateInput"),
@@ -179,6 +193,7 @@
     noteTemplatesDraft: [],
     activeNoteTemplateId: "",
     syncingNoteTemplateForm: false,
+    activeTabContext: null,
     emailTemplatePickState: {
       key: "",
       contact: null,
@@ -459,7 +474,7 @@
   }
 
   function findEmailColumn() {
-    return state.currentColumns.find((c) => /email/i.test(c.label) || /^email(_\d+)?$/i.test(c.id)) || null;
+    return state.currentColumns.find((c) => /email/i.test(c.label) || /^email(_\d+)?$/i.test(c.id)) || { id: "email", label: "Email" };
   }
 
   function findNameColumn() {
@@ -482,20 +497,22 @@
 
   function getContactDisplayName(contact) {
     const nameColumn = findNameColumn();
-    if (!nameColumn) return "Contact";
-    const value = String(contact?.values?.[nameColumn.id] || "").trim();
+    const fallback = String(contact?.values?.name || "").trim();
+    if (!nameColumn) return fallback || "Contact";
+    const value = String(contact?.values?.[nameColumn.id] || fallback || "").trim();
     return value || "Contact";
   }
 
   function getRecordIdForContact(contact) {
     const recordIdColumn = findRecordIdColumn();
-    if (!recordIdColumn) return "";
-    return String(contact?.values?.[recordIdColumn.id] || "").replace(/\D/g, "");
+    const fromValues = recordIdColumn ? String(contact?.values?.[recordIdColumn.id] || "").replace(/\D/g, "") : "";
+    if (fromValues) return fromValues;
+    return String(contact?.recordId || contact?.values?.record_id || "").replace(/\D/g, "");
   }
 
   function getFirstNameFromContact(contact) {
     const nameColumn = findNameColumn();
-    const rawName = nameColumn ? String(contact?.values?.[nameColumn.id] || "").trim() : "";
+    const rawName = nameColumn ? String(contact?.values?.[nameColumn.id] || contact?.values?.name || "").trim() : String(contact?.values?.name || "").trim();
     if (!rawName) return "";
     return rawName.split(/\s+/)[0] || "";
   }

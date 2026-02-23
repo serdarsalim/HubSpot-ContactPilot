@@ -18,6 +18,10 @@
     return !!dom.emailTemplatesPageEl && !dom.emailTemplatesPageEl.hidden;
   }
 
+  function isActiveTabOpen() {
+    return !!dom.activeTabPageEl && !dom.activeTabPageEl.hidden;
+  }
+
   function isWhatsappTemplatesOpen() {
     return !!dom.whatsappTemplatesPageEl && !dom.whatsappTemplatesPageEl.hidden;
   }
@@ -31,17 +35,19 @@
   }
 
   function syncTopLevelViewState() {
+    const activeTabOpen = isActiveTabOpen();
     const emailOpen = isEmailTemplatesOpen();
     const whatsappOpen = isWhatsappTemplatesOpen();
     const noteOpen = isNoteTemplatesOpen();
     const settingsOpen = isSettingsPageOpen();
 
+    if (dom.activeTabBtn) dom.activeTabBtn.classList.toggle("active", activeTabOpen);
     if (dom.emailSettingsBtn) dom.emailSettingsBtn.classList.toggle("active", emailOpen);
     if (dom.whatsappSettingsBtn) dom.whatsappSettingsBtn.classList.toggle("active", whatsappOpen);
     if (dom.noteSettingsBtn) dom.noteSettingsBtn.classList.toggle("active", noteOpen);
     if (dom.settingsBtn) dom.settingsBtn.classList.toggle("active", settingsOpen);
-    if (dom.contactViewBtn) dom.contactViewBtn.classList.toggle("active", !emailOpen && !whatsappOpen && !noteOpen && !settingsOpen);
-    if (dom.mainPageEl) dom.mainPageEl.classList.toggle("header-only", emailOpen || whatsappOpen || noteOpen || settingsOpen);
+    if (dom.contactViewBtn) dom.contactViewBtn.classList.toggle("active", !activeTabOpen && !emailOpen && !whatsappOpen && !noteOpen && !settingsOpen);
+    if (dom.mainPageEl) dom.mainPageEl.classList.toggle("header-only", activeTabOpen || emailOpen || whatsappOpen || noteOpen || settingsOpen);
     App.updateStickyHeadOffset();
   }
 
@@ -52,6 +58,11 @@
 
   function setEmailTemplatesMode(isOpen) {
     if (dom.emailTemplatesPageEl) dom.emailTemplatesPageEl.hidden = !isOpen;
+    syncTopLevelViewState();
+  }
+
+  function setActiveTabMode(isOpen) {
+    if (dom.activeTabPageEl) dom.activeTabPageEl.hidden = !isOpen;
     syncTopLevelViewState();
   }
 
@@ -119,6 +130,9 @@
       }
       setEmailTemplatesMode(false);
     }
+    if (isActiveTabOpen()) {
+      setActiveTabMode(false);
+    }
     if (isWhatsappTemplatesOpen()) {
       if (typeof App.flushWhatsappTemplateAutosave === "function") {
         void App.flushWhatsappTemplateAutosave({ showToast: false });
@@ -154,6 +168,9 @@
     App.closeWhatsappTemplatePicker();
     if (isSettingsPageOpen()) {
       setSettingsMode(false);
+    }
+    if (isActiveTabOpen()) {
+      setActiveTabMode(false);
     }
     if (isWhatsappTemplatesOpen()) {
       if (typeof App.flushWhatsappTemplateAutosave === "function") {
@@ -191,6 +208,9 @@
     App.closeWhatsappTemplatePicker();
     if (isSettingsPageOpen()) {
       setSettingsMode(false);
+    }
+    if (isActiveTabOpen()) {
+      setActiveTabMode(false);
     }
     if (isEmailTemplatesOpen()) {
       if (typeof App.flushEmailTemplateAutosave === "function") {
@@ -240,6 +260,9 @@
     if (isSettingsPageOpen()) {
       setSettingsMode(false);
     }
+    if (isActiveTabOpen()) {
+      setActiveTabMode(false);
+    }
     if (isEmailTemplatesOpen()) {
       if (typeof App.flushEmailTemplateAutosave === "function") {
         void App.flushEmailTemplateAutosave({ showToast: false });
@@ -276,10 +299,38 @@
   function openContactsView() {
     App.closeEmailTemplatePicker();
     App.closeWhatsappTemplatePicker();
+    closeActiveTab();
     closeEmailSettings();
     closeWhatsappSettings();
     closeNoteSettings();
     closeSettings();
+  }
+
+  function openActiveTab() {
+    if (!dom.activeTabPageEl || !dom.activeTabPageEl.hidden) return;
+    App.closeEmailTemplatePicker();
+    App.closeWhatsappTemplatePicker();
+    if (isSettingsPageOpen()) setSettingsMode(false);
+    closeEmailSettings();
+    closeWhatsappSettings();
+    closeNoteSettings();
+    setActiveTabMode(true);
+    if (typeof App.loadActiveTabContext === "function") {
+      void App.loadActiveTabContext();
+    }
+  }
+
+  function closeActiveTab() {
+    if (!isActiveTabOpen()) return;
+    setActiveTabMode(false);
+  }
+
+  function toggleActiveTab() {
+    if (dom.activeTabPageEl?.hidden) {
+      openActiveTab();
+      return;
+    }
+    closeActiveTab();
   }
 
   async function saveEmailSettings(options = {}) {
@@ -628,6 +679,7 @@
     toggleSettings,
     setSettingsMode,
     setEmailTemplatesMode,
+    setActiveTabMode,
     setWhatsappTemplatesMode,
     setNoteTemplatesMode,
     syncTopLevelViewState,
@@ -640,6 +692,9 @@
     openNoteSettings,
     closeNoteSettings,
     toggleNoteSettings,
+    openActiveTab,
+    closeActiveTab,
+    toggleActiveTab,
     openContactsView,
     buildSyncSettingsPayload,
     persistSyncSettings,

@@ -4,6 +4,7 @@
   const shared = globalThis.ContactPilotShared || {};
   const MESSAGE_TYPES = shared.MESSAGE_TYPES || Object.freeze({
     GET_CONTACTS: "GET_CONTACTS",
+    GET_ACTIVE_TAB_CONTEXT: "GET_ACTIVE_TAB_CONTEXT",
     GET_PORTAL_ID: "GET_PORTAL_ID",
     CREATE_NOTE_ON_PAGE: "CREATE_NOTE_ON_PAGE",
     GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
@@ -447,6 +448,86 @@
   function getPortalIdFromPath() {
     const match = String(location.pathname || "").match(/\/contacts\/(\d+)\//i);
     return match ? match[1] : "";
+  }
+
+  function getRecordIdFromPath() {
+    const match = String(location.pathname || "").match(/\/record\/0-1\/(\d+)/i);
+    return match ? match[1] : "";
+  }
+
+  function inferObjectKindFromPath() {
+    const objectTypeMatch = String(location.pathname || "").match(/\/record\/0-(\d+)\//i);
+    if (!objectTypeMatch) return "unknown";
+    const objectTypeId = objectTypeMatch[1];
+    if (objectTypeId === "1") return "contact";
+    if (objectTypeId === "2") return "company";
+    if (objectTypeId === "3") return "deal";
+    return "record";
+  }
+
+  function findActiveContactName() {
+    const heading = Array.from(document.querySelectorAll("h1, [data-test-id*='name'], [data-selenium-test*='record-name']"))
+      .map((el) => cleanText(el.textContent || ""))
+      .find(Boolean);
+    return sanitizeNameValue(heading || "");
+  }
+
+  function findActiveContactEmail() {
+    const mailto = Array.from(document.querySelectorAll("a[href^='mailto:']"))
+      .map((el) => cleanText(el.textContent || "").toLowerCase())
+      .find((text) => /\S+@\S+\.\S+/.test(text));
+    if (mailto) return mailto;
+
+    const textEmail = cleanText(document.body?.innerText || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return textEmail ? String(textEmail[0]).toLowerCase() : "";
+  }
+
+  function findActiveContactPhone() {
+    const telAnchor = Array.from(document.querySelectorAll("a[href^='tel:']"))
+      .map((el) => cleanText(el.textContent || el.getAttribute("href") || ""))
+      .find(Boolean);
+    if (telAnchor) return telAnchor;
+
+    const candidates = Array.from(document.querySelectorAll("a, span, div"))
+      .map((el) => cleanText(el.textContent || ""))
+      .filter((text) => /\+?\d[\d\s\-().]{6,}\d/.test(text));
+    return candidates[0] || "";
+  }
+
+  function getActiveTabContext(countryPrefix = DEFAULT_COUNTRY_CODE, messageText = "") {
+    const portalId = getPortalIdFromPath();
+    const recordId = getRecordIdFromPath();
+    const kind = inferObjectKindFromPath();
+
+    if (kind !== "contact" || !recordId) {
+      return { kind, portalId, recordId: "" };
+    }
+
+    const name = findActiveContactName();
+    const email = findActiveContactEmail();
+    const phone = findActiveContactPhone();
+    const phoneDigits = normalizePhone(phone, countryPrefix) || "";
+    const baseWaUrl = phoneDigits ? `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number` : "";
+    const messageBody = String(messageText || "").replace(/\[name\]/gi, name ? name.split(" ")[0] : "").trim();
+    const waUrl = baseWaUrl ? (messageBody ? `${baseWaUrl}&text=${encodeURIComponent(messageBody)}` : baseWaUrl) : "";
+
+    return {
+      kind,
+      portalId,
+      recordId,
+      contact: {
+        key: `record_${recordId}`,
+        recordId,
+        values: {
+          name,
+          email,
+          phone,
+          record_id: recordId
+        },
+        phoneDigits,
+        waUrl
+      }
+    };
   }
 
   function sleep(ms) {
@@ -1172,6 +1253,18 @@
         .then((payload) => sendResponse({ ok: true, ...payload }))
         .catch((error) => sendResponse({ ok: false, error: String(error) }));
       return true;
+    }
+
+    if (message.type === MESSAGE_TYPES.GET_ACTIVE_TAB_CONTEXT) {
+      const countryPrefix = String(message.countryPrefix || DEFAULT_COUNTRY_CODE);
+      const messageText = String(message.messageText || "");
+      try {
+        const payload = getActiveTabContext(countryPrefix, messageText);
+        sendResponse({ ok: true, ...payload });
+      } catch (error) {
+        sendResponse({ ok: false, error: String(error) });
+      }
+      return;
     }
 
     if (message.type === MESSAGE_TYPES.GET_PORTAL_ID) {
