@@ -655,6 +655,18 @@
         word-break: break-word;
       }
 
+      .active-tab-field-value-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .active-tab-list-item {
+        display: block;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
       .active-tab-phone-link {
         color: #0b66c3;
         text-decoration: none;
@@ -665,11 +677,14 @@
         text-decoration: underline;
       }
 
-      .active-tab-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 12px;
+      .active-tab-inline-link {
+        color: #0b66c3;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .active-tab-inline-link:hover {
+        text-decoration: underline;
       }
 
       .notes-overlay {
@@ -1409,6 +1424,10 @@
         color: #82bdff;
       }
 
+      body[data-theme="dark"] .active-tab-inline-link {
+        color: #82bdff;
+      }
+
       body[data-theme="dark"] .email-template-list-btn.active {
         background: linear-gradient(180deg, #24384f 0%, #1f3248 100%);
         border-color: #4f6f93;
@@ -1559,7 +1578,7 @@
                 <path d="M16 4.13a3 3 0 0 1 0 5.74"></path>
               </svg>
             </button>
-            <button id="activeTabBtn" class="title-icon-btn" aria-label="Show active tab actions" title="Show active tab actions">
+            <button id="activeTabBtn" class="title-icon-btn" aria-label="Show Contact Card" title="Show Contact Card">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="15" rx="2"></rect>
                 <path d="M8 21h8"></path>
@@ -1630,40 +1649,35 @@
     <section id="activeTabPage" class="active-tab-page" hidden>
       <div class="active-tab-card">
         <div class="settings-head">
-          <h2>Active Tab</h2>
+          <h2>Contact Card</h2>
           <button id="activeTabRefreshBtn" class="btn" type="button">Refresh</button>
         </div>
-        <p id="activeTabStatus" class="template-import-summary">Detecting active HubSpot tab...</p>
+        <p id="activeTabStatus" class="template-import-summary">Detecting contact tab...</p>
         <div class="active-tab-grid">
           <div class="active-tab-field">
             <span class="active-tab-field-label">Name</span>
             <span id="activeTabName" class="active-tab-field-value">-</span>
           </div>
           <div class="active-tab-field">
-            <span class="active-tab-field-label">Type</span>
-            <span id="activeTabKind" class="active-tab-field-value">-</span>
+            <span class="active-tab-field-label">Contact Owner</span>
+            <span id="activeTabOwner" class="active-tab-field-value">-</span>
           </div>
           <div class="active-tab-field">
-            <span class="active-tab-field-label">Record ID</span>
-            <span id="activeTabRecordId" class="active-tab-field-value">-</span>
-          </div>
-          <div class="active-tab-field">
-            <span class="active-tab-field-label">Portal ID</span>
-            <span id="activeTabPortalId" class="active-tab-field-value">-</span>
+            <span class="active-tab-field-label">Phone</span>
+            <span id="activeTabPhone" class="active-tab-field-value">-</span>
           </div>
           <div class="active-tab-field">
             <span class="active-tab-field-label">Email</span>
             <span id="activeTabEmail" class="active-tab-field-value">-</span>
           </div>
           <div class="active-tab-field">
-            <span class="active-tab-field-label">Phone</span>
-            <span id="activeTabPhone" class="active-tab-field-value">-</span>
+            <span class="active-tab-field-label">Latest Note</span>
+            <span id="activeTabLatestNote" class="active-tab-field-value">-</span>
           </div>
-        </div>
-        <div class="active-tab-actions">
-          <button id="activeTabEmailActionBtn" class="btn" type="button">Email</button>
-          <button id="activeTabWhatsappActionBtn" class="btn" type="button">WhatsApp</button>
-          <button id="activeTabNotesActionBtn" class="btn" type="button">Notes</button>
+          <div class="active-tab-field">
+            <span class="active-tab-field-label">Latest Task</span>
+            <span id="activeTabLatestTask" class="active-tab-field-value">-</span>
+          </div>
         </div>
       </div>
     </section>

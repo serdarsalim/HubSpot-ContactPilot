@@ -493,6 +493,31 @@
     return textEmail ? String(textEmail[0]).toLowerCase() : "";
   }
 
+  function findActiveContactOwner() {
+    const ownerLabels = Array.from(document.querySelectorAll("label, dt, th, [data-test-id*='owner'], [data-selenium-test*='owner']"));
+    for (const labelNode of ownerLabels) {
+      const labelText = cleanText(labelNode.textContent || "");
+      if (!/\bcontact owner\b/i.test(labelText)) continue;
+
+      const siblingText = cleanText(labelNode.nextElementSibling?.textContent || "");
+      if (siblingText && !/\bcontact owner\b/i.test(siblingText)) {
+        return cleanSummaryText(siblingText, 70);
+      }
+
+      const rowText = cleanText(labelNode.closest("tr, [role='row'], li, article, section, div")?.innerText || "");
+      const inlineMatch = rowText.match(/contact owner\s*[:\-]?\s*([a-z0-9 .,'-]{2,70})/i);
+      if (inlineMatch) {
+        return cleanSummaryText(inlineMatch[1], 70);
+      }
+    }
+
+    const bodyMatch = cleanText(document.body?.innerText || "").match(/contact owner\s*[:\-]?\s*([a-z0-9 .,'-]{2,70})/i);
+    if (bodyMatch) {
+      return cleanSummaryText(bodyMatch[1], 70);
+    }
+    return "";
+  }
+
   function findActiveContactPhone() {
     const telAnchor = Array.from(document.querySelectorAll("a[href^='tel:']"))
       .map((el) => {
@@ -510,6 +535,77 @@
     return candidates[0] || "";
   }
 
+  function cleanSummaryText(value, maxLen = 120) {
+    const cleaned = cleanText(value || "").replace(/\s*[|•·]\s*/g, " ").trim();
+    if (!cleaned) return "";
+    return cleaned.length > maxLen ? `${cleaned.slice(0, maxLen - 1).trim()}...` : cleaned;
+  }
+
+  function extractRecentNotesFromText(text) {
+    const raw = String(text || "");
+    let body = raw;
+    body = body.replace(/^note by\s+.+?\s+\d{1,2}\s+[a-z]{3,9}\s+\d{4}\s+at\s+\d{1,2}:\d{2}(?:\s*[ap]m)?/i, "");
+    body = body.replace(/\bnote description\b/i, "");
+    body = body.replace(/\bthis activity is collapsed.*$/i, "");
+    body = body.replace(/\bnote\b[:\s-]*/i, "");
+    return cleanSummaryText(body, 120);
+  }
+
+  function extractRecentTaskTitleFromText(text) {
+    const raw = String(text || "");
+    const titleMatch = raw.match(/\btask\b\s*[:\-]?\s*([^|]{3,140})/i);
+    if (titleMatch) {
+      return cleanSummaryText(titleMatch[1], 110);
+    }
+
+    let fallback = raw.replace(/\b(task|completed|due|owner|assignee)\b/gi, " ");
+    return cleanSummaryText(fallback, 110);
+  }
+
+  function collectRecentActivity(limit = 1) {
+    const selectors = [
+      "[data-test-id*='timeline'] [role='listitem']",
+      "[data-test-id*='activity']",
+      "[data-test-id*='engagement']",
+      "[data-selenium-test*='timeline'] [role='listitem']",
+      "[data-selenium-test*='engagement']",
+      "main [role='listitem']",
+      "main article",
+      "main li"
+    ];
+
+    const seenText = new Set();
+    const notes = [];
+    const tasks = [];
+
+    for (const selector of selectors) {
+      const nodes = Array.from(document.querySelectorAll(selector));
+      for (const node of nodes) {
+        if (!isVisible(node)) continue;
+        const text = cleanText(node.innerText || node.textContent || "");
+        if (!text || text.length < 8) continue;
+        if (seenText.has(text)) continue;
+        seenText.add(text);
+
+        const lowered = text.toLowerCase();
+        if (notes.length < limit && lowered.includes("note")) {
+          const note = extractRecentNotesFromText(text);
+          if (note) notes.push(note);
+        }
+        if (tasks.length < limit && (lowered.includes("task") || lowered.includes("to-do") || lowered.includes("todo"))) {
+          const task = extractRecentTaskTitleFromText(text);
+          if (task) tasks.push(task);
+        }
+
+        if (notes.length >= limit && tasks.length >= limit) {
+          return { notes, tasks };
+        }
+      }
+    }
+
+    return { notes, tasks };
+  }
+
   function getActiveTabContext(countryPrefix = DEFAULT_COUNTRY_CODE, messageText = "") {
     const portalId = getPortalIdFromPath();
     const recordId = getRecordIdFromPath();
@@ -520,8 +616,10 @@
     }
 
     const name = findActiveContactName();
+    const owner = findActiveContactOwner();
     const email = findActiveContactEmail();
     const phone = findActiveContactPhone();
+    const recentActivity = collectRecentActivity(1);
     const phoneDigits = normalizePhone(phone, countryPrefix) || "";
     const baseWaUrl = phoneDigits ? `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number` : "";
     const messageBody = String(messageText || "").replace(/\[name\]/gi, name ? name.split(" ")[0] : "").trim();
@@ -536,13 +634,19 @@
         recordId,
         values: {
           name,
+          owner,
           email,
           phone,
           record_id: recordId
         },
         phoneDigits,
         waUrl
-      }
+      },
+      owner,
+      latestNote: recentActivity.notes[0] || "",
+      latestTask: recentActivity.tasks[0] || "",
+      recentNotes: recentActivity.notes,
+      recentTasks: recentActivity.tasks
     };
   }
 

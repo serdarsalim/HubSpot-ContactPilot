@@ -38,6 +38,11 @@
     return true;
   }
 
+  function isContactRecordTab(tab) {
+    const recordId = extractContactRecordIdFromUrl(tab?.url || "");
+    return !!recordId;
+  }
+
   async function sendGetContactsMessage(tabId, { countryPrefix = "", messageText = "", loadAll = false } = {}) {
     return chrome.tabs.sendMessage(tabId, {
       type: MT.GET_CONTACTS,
@@ -74,6 +79,19 @@
     }
 
     return null;
+  }
+
+  async function findBestContactRecordTab() {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const hubSpotTabs = await chrome.tabs.query({ url: ["https://app.hubspot.com/*"] });
+    if (!hubSpotTabs.length) return null;
+
+    if (activeTab && typeof activeTab.id === "number" && isContactRecordTab(activeTab)) {
+      return activeTab;
+    }
+
+    const remaining = hubSpotTabs.filter((tab) => tab?.id !== activeTab?.id && isContactRecordTab(tab)).sort(compareTabsByRecency);
+    return remaining[0] || null;
   }
 
   async function waitForTabComplete(tabId, timeoutMs = timing.waitForTabCompleteTimeoutMs) {
@@ -197,6 +215,9 @@
     }
 
     const openFreshContactTabAndWork = async () => {
+      if (!portalId) {
+        throw new Error("Could not detect HubSpot portal ID for this contact.");
+      }
       const url = `https://app.hubspot.com/contacts/${portalId}/record/0-1/${cleanId}?interaction=note`;
       const openedTab = await chrome.tabs.create({ url, active: false });
       if (!openedTab || typeof openedTab.id !== "number") {
@@ -226,6 +247,23 @@
     return openFreshContactTabAndWork();
   }
 
+  async function resolvePortalIdForRecord(recordId = "") {
+    const cleanId = String(recordId || "").replace(/\D/g, "");
+    if (!cleanId) return "";
+
+    const existingContactTab = await findExistingContactTab(cleanId);
+    const existingPortalId = extractPortalIdFromContactUrl(existingContactTab?.url || "");
+    if (existingPortalId) return existingPortalId;
+
+    const bestContactTab = await findBestContactRecordTab();
+    const bestPortalId = extractPortalIdFromContactUrl(bestContactTab?.url || "");
+    if (bestPortalId) return bestPortalId;
+
+    const hubSpotTab = await findHubSpotTab();
+    if (!hubSpotTab || typeof hubSpotTab.id !== "number") return "";
+    return getPortalId(hubSpotTab);
+  }
+
   async function createSingleHubSpotNote(recordId, noteBody, portalId) {
     return withContactTab(recordId, portalId, async (tabId) => {
       await sendCreateNoteMessage(tabId, noteBody);
@@ -241,16 +279,6 @@
   }
 
   async function createHubSpotNotes(recordIds, noteBody) {
-    const hubSpotTab = await findHubSpotTab();
-    if (!hubSpotTab || typeof hubSpotTab.id !== "number") {
-      return { ok: false, error: "Open a HubSpot tab (app.hubspot.com), refresh it, and try again." };
-    }
-
-    const portalId = await getPortalId(hubSpotTab);
-    if (!portalId) {
-      return { ok: false, error: "Could not detect HubSpot portal ID." };
-    }
-
     const uniqueRecordIds = [
       ...new Set(
         (Array.isArray(recordIds) ? recordIds : [])
@@ -264,6 +292,10 @@
 
     for (const recordId of uniqueRecordIds) {
       try {
+        const portalId = await resolvePortalIdForRecord(recordId);
+        if (!portalId) {
+          throw new Error("Could not detect HubSpot portal ID.");
+        }
         await createSingleHubSpotNote(recordId, noteBody, portalId);
         created += 1;
       } catch (error) {
@@ -280,12 +312,7 @@
       throw new Error("Invalid Record ID.");
     }
 
-    const hubSpotTab = await findHubSpotTab();
-    if (!hubSpotTab || typeof hubSpotTab.id !== "number") {
-      throw new Error("Open a HubSpot tab (app.hubspot.com), refresh it, and try again.");
-    }
-
-    const portalId = await getPortalId(hubSpotTab);
+    const portalId = await resolvePortalIdForRecord(cleanId);
     if (!portalId) {
       throw new Error("Could not detect HubSpot portal ID.");
     }
@@ -314,6 +341,7 @@
   Object.assign(App, {
     findHubSpotTab,
     findBestContactsTab,
+    findBestContactRecordTab,
     extractPortalIdFromUrl,
     isValidContactsPayload,
     sleep,
@@ -326,6 +354,7 @@
     withContactTab,
     createSingleHubSpotNote,
     readSingleHubSpotNotes,
+    resolvePortalIdForRecord,
     createHubSpotNotes,
     getHubSpotNotesForRecord,
     copyTextToClipboard

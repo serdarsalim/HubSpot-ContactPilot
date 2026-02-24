@@ -25,15 +25,10 @@
     return left.replace(/\s*-\s*HubSpot\s*$/i, "").trim();
   }
 
-  function isHubSpotUrl(url) {
-    return /^https:\/\/app\.hubspot\.com\//i.test(String(url || ""));
-  }
-
-  async function getActiveHubSpotTab() {
-    const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const active = activeTabs.find((tab) => isHubSpotUrl(tab?.url || ""));
-    if (active && typeof active.id === "number") return active;
-    return App.findHubSpotTab();
+  async function getPreferredContactRecordTab() {
+    const tab = await App.findBestContactRecordTab();
+    if (tab && typeof tab.id === "number") return tab;
+    return null;
   }
 
   function activeTabKey(context) {
@@ -61,22 +56,47 @@
       .trim();
   }
 
+  function bindContactCardLinks(context) {
+    const isContact = String(context?.kind || "") === "contact" && !!context?.contact;
+    if (dom.activeTabEmailEl) {
+      const emailTemplateLink = dom.activeTabEmailEl.querySelector("[data-active-tab-email-template]");
+      if (emailTemplateLink instanceof HTMLElement) {
+        emailTemplateLink.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (!isContact) return;
+          const key = activeTabKey(context);
+          App.openEmailTemplatePicker(context.contact, key);
+        });
+      }
+    }
+
+    if (dom.activeTabLatestNoteEl) {
+      const notesLink = dom.activeTabLatestNoteEl.querySelector("[data-active-tab-open-notes]");
+      if (notesLink instanceof HTMLElement) {
+        notesLink.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (!isContact) return;
+          const recordId = String(context?.recordId || "").replace(/\D/g, "");
+          if (!recordId) return;
+          App.openNotesDialog(context.contact, recordId);
+        });
+      }
+    }
+  }
+
   function renderActiveTabContext() {
     const context = state.activeTabContext;
     const contact = context?.contact || null;
     const kind = String(context?.kind || "unknown");
 
-    setText(dom.activeTabKindEl, kind);
     setText(dom.activeTabNameEl, contact ? App.getContactDisplayName(contact) : "");
-    setText(dom.activeTabRecordIdEl, context?.recordId || "");
-    setText(dom.activeTabPortalIdEl, context?.portalId || "");
-
-    const emailCol = App.findEmailColumn();
-    const emailValue = contact ? String(contact.values?.[emailCol?.id || "email"] || contact.values?.email || "") : "";
+    setText(dom.activeTabOwnerEl, context?.owner || contact?.values?.owner || "");
+    const emailValue = contact ? String(contact.values?.email || "").trim() : "";
+    const latestNote = String(context?.latestNote || context?.recentNotes?.[0] || "").trim();
+    const latestTask = String(context?.latestTask || context?.recentTasks?.[0] || "").trim();
     const phoneRawValue = contact ? String(contact.values?.[state.phoneColumnId || "phone"] || contact.values?.phone || "") : "";
     const phoneValue = normalizePhoneDisplay(phoneRawValue);
 
-    setText(dom.activeTabEmailEl, emailValue);
     if (dom.activeTabPhoneEl) {
       if (contact?.waUrl) {
         dom.activeTabPhoneEl.innerHTML = `<a class='active-tab-phone-link' href='${App.escapeHtml(contact.waUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(
@@ -86,21 +106,35 @@
         dom.activeTabPhoneEl.textContent = phoneValue || "-";
       }
     }
-
-    const isContact = kind === "contact" && !!contact;
-    if (dom.activeTabEmailActionBtn) dom.activeTabEmailActionBtn.disabled = !isContact;
-    if (dom.activeTabWhatsappActionBtn) dom.activeTabWhatsappActionBtn.disabled = !isContact;
-    if (dom.activeTabNotesActionBtn) dom.activeTabNotesActionBtn.disabled = !isContact || !String(context?.recordId || "").trim();
+    if (dom.activeTabEmailEl) {
+      if (emailValue) {
+        dom.activeTabEmailEl.innerHTML = `${App.escapeHtml(emailValue)}<br><a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">Use Email Template</a>`;
+      } else if (kind === "contact" && contact) {
+        dom.activeTabEmailEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">Use Email Template</a>`;
+      } else {
+        dom.activeTabEmailEl.textContent = "-";
+      }
+    }
+    if (dom.activeTabLatestNoteEl) {
+      const linkLabel = latestNote || "Open Notes";
+      if (kind === "contact" && contact) {
+        dom.activeTabLatestNoteEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-open-notes="1">${App.escapeHtml(linkLabel)}</a>`;
+      } else {
+        dom.activeTabLatestNoteEl.textContent = latestNote || "No recent notes";
+      }
+    }
+    setText(dom.activeTabLatestTaskEl, latestTask || "No recent tasks");
+    bindContactCardLinks(context);
   }
 
   async function loadActiveTabContext() {
-    setActiveTabStatus("Detecting active HubSpot tab...");
+    setActiveTabStatus("Detecting contact tab...");
 
-    const tab = await getActiveHubSpotTab();
+    const tab = await getPreferredContactRecordTab();
     if (!tab || typeof tab.id !== "number") {
       state.activeTabContext = null;
       renderActiveTabContext();
-      setActiveTabStatus("Open a HubSpot tab and select a contact record to use Active Tab actions.");
+      setActiveTabStatus("Open a HubSpot contact record tab to use Contact Card actions.");
       return;
     }
 
@@ -125,7 +159,12 @@
         kind,
         portalId,
         recordId,
-        contact
+        contact,
+        owner: String(response.owner || contact?.values?.owner || "").trim(),
+        latestNote: String(response.latestNote || response.recentNotes?.[0] || "").trim(),
+        latestTask: String(response.latestTask || response.recentTasks?.[0] || "").trim(),
+        recentNotes: Array.isArray(response.recentNotes) ? response.recentNotes : [],
+        recentTasks: Array.isArray(response.recentTasks) ? response.recentTasks : []
       };
 
       if (portalId) {
@@ -134,9 +173,9 @@
 
       renderActiveTabContext();
       if (kind === "contact") {
-        setActiveTabStatus("Active contact loaded. Choose an action below.");
+        setActiveTabStatus("Active contact loaded. Use the links in this card.");
       } else {
-        setActiveTabStatus("Active tab is not a contact record. Open a contact record to use Email/WhatsApp/Notes actions.");
+        setActiveTabStatus("Selected tab is not a contact record. Open a contact record to use Email/WhatsApp/Notes actions.");
       }
     } catch (_error) {
       const kind = parseObjectKindFromUrl(tab.url || "");
@@ -155,6 +194,7 @@
                 recordId,
                 values: {
                   name: sanitizeTitleName(tab.title || ""),
+                  owner: "",
                   email: "",
                   phone: "",
                   record_id: recordId
@@ -162,7 +202,12 @@
                 phoneDigits: "",
                 waUrl: ""
               }
-            : null
+            : null,
+        owner: "",
+        latestNote: "",
+        latestTask: "",
+        recentNotes: [],
+        recentTasks: []
       };
       if (portalId) {
         state.currentPortalId = portalId;
@@ -171,41 +216,13 @@
       if (kind === "contact" && recordId) {
         setActiveTabStatus("Loaded active contact from URL fallback. Email/Notes are ready; refresh contact page for full field detection.");
       } else {
-        setActiveTabStatus("Active tab is not a contact record. Open a contact record to use Email/WhatsApp/Notes actions.");
+        setActiveTabStatus("Selected tab is not a contact record. Open a contact record to use Email/WhatsApp/Notes actions.");
       }
     }
   }
 
-  function openActiveTabEmailAction() {
-    const context = state.activeTabContext;
-    if (!context?.contact) return;
-    const key = activeTabKey(context);
-    App.openEmailTemplatePicker(context.contact, key);
-  }
-
-  function openActiveTabWhatsappAction() {
-    const context = state.activeTabContext;
-    if (!context?.contact) return;
-    const key = activeTabKey(context);
-    App.openWhatsappTemplatePicker(context.contact, key);
-  }
-
-  function openActiveTabNotesAction() {
-    const context = state.activeTabContext;
-    if (!context?.contact) return;
-    const recordId = String(context.recordId || "").replace(/\D/g, "");
-    if (!recordId) {
-      App.setStatus("Could not detect Record ID from active tab.");
-      return;
-    }
-    App.openNotesDialog(context.contact, recordId);
-  }
-
   Object.assign(App, {
     renderActiveTabContext,
-    loadActiveTabContext,
-    openActiveTabEmailAction,
-    openActiveTabWhatsappAction,
-    openActiveTabNotesAction
+    loadActiveTabContext
   });
 })();

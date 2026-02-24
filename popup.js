@@ -205,15 +205,6 @@
       void App.loadActiveTabContext();
     });
   }
-  if (dom.activeTabEmailActionBtn) {
-    dom.activeTabEmailActionBtn.addEventListener("click", App.openActiveTabEmailAction);
-  }
-  if (dom.activeTabWhatsappActionBtn) {
-    dom.activeTabWhatsappActionBtn.addEventListener("click", App.openActiveTabWhatsappAction);
-  }
-  if (dom.activeTabNotesActionBtn) {
-    dom.activeTabNotesActionBtn.addEventListener("click", App.openActiveTabNotesAction);
-  }
 
   async function init() {
     if (typeof App.initAnalytics === "function") {
