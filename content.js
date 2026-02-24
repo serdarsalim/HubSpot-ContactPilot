@@ -484,6 +484,9 @@
   }
 
   function findActiveContactEmail() {
+    const labeledEmail = findLabeledFieldValue(/\bemail\b/i, /\S+@\S+\.\S+/i, 120);
+    if (labeledEmail) return labeledEmail.toLowerCase();
+
     const mailto = Array.from(document.querySelectorAll("a[href^='mailto:']"))
       .map((el) => cleanText(el.textContent || "").toLowerCase())
       .find((text) => /\S+@\S+\.\S+/.test(text));
@@ -493,7 +496,38 @@
     return textEmail ? String(textEmail[0]).toLowerCase() : "";
   }
 
+  function findLabeledFieldValue(labelRegex, valueRegex, maxLen = 120) {
+    const labels = Array.from(document.querySelectorAll("label, dt, th, span, div, p, strong, h4, h5"));
+    for (const node of labels) {
+      if (!isVisible(node)) continue;
+      const labelText = cleanText(node.textContent || "");
+      if (!labelText || labelText.length > 60 || !labelRegex.test(labelText)) continue;
+
+      const siblingText = cleanText(node.nextElementSibling?.textContent || "");
+      if (siblingText && !labelRegex.test(siblingText) && (!valueRegex || valueRegex.test(siblingText))) {
+        return cleanSummaryText(siblingText, maxLen);
+      }
+
+      const row = node.closest("li, tr, [role='row'], section, article, div");
+      const rowText = cleanText(row?.innerText || "");
+      if (rowText) {
+        const inlineMatch = rowText.match(new RegExp(`${labelRegex.source}\\s*[:\\-]?\\s*([^\\n]{2,${maxLen}})`, "i"));
+        const lineMatch = String(row?.innerText || "").match(new RegExp(`${labelRegex.source}\\s*\\n+\\s*([^\\n]{2,${maxLen}})`, "i"));
+        const extracted = cleanText((lineMatch?.[1] || inlineMatch?.[1] || "").trim());
+        if (extracted && !labelRegex.test(extracted) && (!valueRegex || valueRegex.test(extracted))) {
+          return cleanSummaryText(extracted, maxLen);
+        }
+      }
+    }
+    return "";
+  }
+
   function findActiveContactOwner() {
+    const labeledOwner = findLabeledFieldValue(/\bcontact owner\b/i, /[a-z]/i, 70);
+    if (labeledOwner && !/^(?:--|-|n\/a)$/i.test(labeledOwner)) {
+      return labeledOwner;
+    }
+
     const ownerLabels = Array.from(document.querySelectorAll("label, dt, th, [data-test-id*='owner'], [data-selenium-test*='owner']"));
     for (const labelNode of ownerLabels) {
       const labelText = cleanText(labelNode.textContent || "");
@@ -519,6 +553,9 @@
   }
 
   function findActiveContactPhone() {
+    const labeledPhone = findLabeledFieldValue(/\bphone(?: number)?\b/i, /\+?\d[\d\s\-().]{6,}\d/, 30);
+    if (labeledPhone) return labeledPhone;
+
     const telAnchor = Array.from(document.querySelectorAll("a[href^='tel:']"))
       .map((el) => {
         const href = String(el.getAttribute("href") || "");
@@ -553,6 +590,21 @@
 
   function extractRecentTaskTitleFromText(text) {
     const raw = String(text || "");
+    const lines = raw
+      .split(/\n+/)
+      .map((line) => cleanText(line))
+      .filter(Boolean);
+    for (let idx = lines.length - 1; idx >= 0; idx -= 1) {
+      const line = lines[idx];
+      const lowered = line.toLowerCase();
+      if (lowered.includes("task assigned to") || lowered.startsWith("due:") || lowered.includes("task is incomplete")) {
+        continue;
+      }
+      if (line.length >= 2 && line.length <= 110) {
+        return cleanSummaryText(line, 110);
+      }
+    }
+
     const titleMatch = raw.match(/\btask\b\s*[:\-]?\s*([^|]{3,140})/i);
     if (titleMatch) {
       return cleanSummaryText(titleMatch[1], 110);
@@ -567,8 +619,11 @@
       "[data-test-id*='timeline'] [role='listitem']",
       "[data-test-id*='activity']",
       "[data-test-id*='engagement']",
+      "[data-test-id*='task']",
       "[data-selenium-test*='timeline'] [role='listitem']",
       "[data-selenium-test*='engagement']",
+      "[data-selenium-test*='task']",
+      "[aria-label*='task' i]",
       "main [role='listitem']",
       "main article",
       "main li"
@@ -599,6 +654,22 @@
 
         if (notes.length >= limit && tasks.length >= limit) {
           return { notes, tasks };
+        }
+      }
+    }
+
+    if (tasks.length < limit) {
+      const fallbackNodes = Array.from(document.querySelectorAll("main div, main li, main article"));
+      for (const node of fallbackNodes) {
+        if (!isVisible(node)) continue;
+        const text = cleanText(node.innerText || node.textContent || "");
+        if (!text) continue;
+        const lowered = text.toLowerCase();
+        if (!lowered.includes("task assigned to") && !(lowered.includes("task") && lowered.includes("due:"))) continue;
+        const task = extractRecentTaskTitleFromText(text);
+        if (task) {
+          tasks.push(task);
+          break;
         }
       }
     }

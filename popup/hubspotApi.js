@@ -32,6 +32,18 @@
     return Number(b?.id || 0) - Number(a?.id || 0);
   }
 
+  function isHubSpotUrl(url) {
+    return /^https:\/\/app\.hubspot\.com\//i.test(String(url || ""));
+  }
+
+  async function findActiveHubSpotTab() {
+    const activeTabs = await chrome.tabs.query({ active: true });
+    const candidates = activeTabs.filter((tab) => isHubSpotUrl(tab?.url || ""));
+    if (!candidates.length) return null;
+    candidates.sort(compareTabsByRecency);
+    return candidates[0] || null;
+  }
+
   function isValidContactsPayload(response) {
     if (!response || response.ok !== true) return false;
     if (!Array.isArray(response.columns) || !response.columns.length) return false;
@@ -53,7 +65,7 @@
   }
 
   async function findBestContactsTab({ countryPrefix = "", messageText = "" } = {}) {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = await findActiveHubSpotTab();
     const hubSpotTabs = await chrome.tabs.query({ url: ["https://app.hubspot.com/*"] });
     if (!hubSpotTabs.length) return null;
 
@@ -82,7 +94,7 @@
   }
 
   async function findBestContactRecordTab() {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = await findActiveHubSpotTab();
     const hubSpotTabs = await chrome.tabs.query({ url: ["https://app.hubspot.com/*"] });
     if (!hubSpotTabs.length) return null;
 
@@ -204,17 +216,25 @@
     });
 
     if (!matchingTabs.length) return null;
+    const activeHubSpotTab = await findActiveHubSpotTab();
+    if (activeHubSpotTab && matchingTabs.some((tab) => tab.id === activeHubSpotTab.id)) {
+      return activeHubSpotTab;
+    }
     matchingTabs.sort((a, b) => Number(b.lastAccessed || 0) - Number(a.lastAccessed || 0));
     return matchingTabs[0] || null;
   }
 
-  async function withContactTab(recordId, portalId, work) {
+  async function withContactTab(recordId, portalId, work, options = {}) {
+    const allowOpenFresh = options.allowOpenFresh !== false;
     const cleanId = String(recordId || "").replace(/\D/g, "");
     if (!cleanId) {
       throw new Error("Invalid Record ID.");
     }
 
     const openFreshContactTabAndWork = async () => {
+      if (!allowOpenFresh) {
+        throw new Error("Open the contact tab and try again.");
+      }
       if (!portalId) {
         throw new Error("Could not detect HubSpot portal ID for this contact.");
       }
@@ -239,11 +259,17 @@
         if (!isMissingReceiverError(error)) {
           throw error;
         }
+        if (!allowOpenFresh) {
+          throw new Error("Could not read notes from the current contact tab. Refresh that tab and try again.");
+        }
         // Existing tab can miss content-script receiver (e.g. stale tab). Retry on a fresh contact tab.
         return openFreshContactTabAndWork();
       }
     }
 
+    if (!allowOpenFresh) {
+      throw new Error("Open the contact tab and try again.");
+    }
     return openFreshContactTabAndWork();
   }
 
@@ -268,14 +294,14 @@
     return withContactTab(recordId, portalId, async (tabId) => {
       await sendCreateNoteMessage(tabId, noteBody);
       return { ok: true };
-    });
+    }, { allowOpenFresh: true });
   }
 
   async function readSingleHubSpotNotes(recordId, portalId) {
     return withContactTab(recordId, portalId, async (tabId) => {
       const response = await sendGetNotesMessage(tabId);
       return Array.isArray(response?.notes) ? response.notes : [];
-    });
+    }, { allowOpenFresh: false });
   }
 
   async function createHubSpotNotes(recordIds, noteBody) {

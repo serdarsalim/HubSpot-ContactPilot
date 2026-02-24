@@ -31,6 +31,37 @@
     return null;
   }
 
+  async function requestActiveTabContext(tab) {
+    const attempts = Number(App.timing?.popup?.messageRetryAttempts || 3);
+    const delayMs = Number(App.timing?.popup?.messageRetryDelayMs || 500);
+    let lastError = "";
+
+    try {
+      await App.waitForTabComplete(tab.id);
+    } catch (_error) {
+      // Best-effort only; retry loop below still handles transient states.
+    }
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          type: MT.GET_ACTIVE_TAB_CONTEXT,
+          countryPrefix: state.settings.countryPrefix,
+          messageText: state.settings.messageTemplate
+        });
+        if (response?.ok) return response;
+        lastError = String(response?.error || "Context inspection failed.");
+      } catch (error) {
+        lastError = String(error || "");
+      }
+      if (attempt < attempts - 1) {
+        await App.sleep(delayMs);
+      }
+    }
+
+    throw new Error(lastError || "Could not reach active contact context.");
+  }
+
   function activeTabKey(context) {
     const recordId = String(context?.recordId || "").replace(/\D/g, "");
     if (recordId) return `record_${recordId}`;
@@ -108,7 +139,13 @@
     }
     if (dom.activeTabEmailEl) {
       if (emailValue) {
-        dom.activeTabEmailEl.innerHTML = `${App.escapeHtml(emailValue)}<br><a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">Use Email Template</a>`;
+        if (kind === "contact" && contact) {
+          dom.activeTabEmailEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">${App.escapeHtml(
+            emailValue
+          )}</a>`;
+        } else {
+          dom.activeTabEmailEl.textContent = emailValue;
+        }
       } else if (kind === "contact" && contact) {
         dom.activeTabEmailEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">Use Email Template</a>`;
       } else {
@@ -139,15 +176,7 @@
     }
 
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        type: MT.GET_ACTIVE_TAB_CONTEXT,
-        countryPrefix: state.settings.countryPrefix,
-        messageText: state.settings.messageTemplate
-      });
-
-      if (!response?.ok) {
-        throw new Error(String(response?.error || "Context inspection failed."));
-      }
+      const response = await requestActiveTabContext(tab);
 
       const recordId = String(response.recordId || parseRecordIdFromUrl(tab.url || "")).replace(/\D/g, "");
       const portalId = String(response.portalId || App.extractPortalIdFromUrl(tab.url || "") || "").replace(/\D/g, "");
@@ -214,7 +243,7 @@
       }
       renderActiveTabContext();
       if (kind === "contact" && recordId) {
-        setActiveTabStatus("Loaded active contact from URL fallback. Email/Notes are ready; refresh contact page for full field detection.");
+        setActiveTabStatus("Loaded contact from URL fallback only. Refresh the contact tab and click Refresh.");
       } else {
         setActiveTabStatus("Selected tab is not a contact record. Open a contact record to use Email/WhatsApp/Notes actions.");
       }
