@@ -42,12 +42,36 @@
     }, 0);
   }
 
+  function isPlaceholderValue(rawValue) {
+    const value = String(rawValue || "")
+      .replace(/\u00a0/g, " ")
+      .trim()
+      .toLowerCase();
+    if (!value) return true;
+    return value === "-" || value === "--" || value === "—" || value === "n/a" || value === "na" || value === "null" || value === "undefined";
+  }
+
+  function hasAnyMeaningfulContactValue(contact, columns) {
+    const values = contact?.values && typeof contact.values === "object" ? contact.values : {};
+    const sourceColumns = Array.isArray(columns) ? columns : [];
+    if (!sourceColumns.length) {
+      return Object.values(values).some((value) => !isPlaceholderValue(value));
+    }
+    return sourceColumns.some((col) => !isPlaceholderValue(values[col.id]));
+  }
+
+  function filterOutEmptyContacts(contacts, columns) {
+    const source = Array.isArray(contacts) ? contacts : [];
+    if (!source.length) return [];
+    return source.filter((contact) => hasAnyMeaningfulContactValue(contact, columns));
+  }
+
   function setContactsStatus(filteredContacts) {
-    const total = Array.isArray(filteredContacts) ? filteredContacts.length : 0;
-    const selected = state.selectedKeys.size;
+    const total = Array.isArray(state.currentContacts) ? state.currentContacts.length : 0;
+    const processed = Array.isArray(filteredContacts) ? filteredContacts.length : 0;
+    const filteredOut = Math.max(0, total - processed);
     const newCount = countNewContacts(filteredContacts || []);
-    const selectedPart = selected > 0 ? ` Selected ${selected}.` : "";
-    App.setStatus(`Found ${total} contact(s).${selectedPart} ${newCount} new.`);
+    App.setStatus(`Found ${total} contacts, ${filteredOut} filtered, ${processed} processed, ${newCount} new.`);
   }
 
   function isNextActivityDateColumn(col) {
@@ -89,8 +113,14 @@
       return;
     }
 
-    state.displayedContacts = App.getSortedContacts(filteredContacts);
-    setContactsStatus(filteredContacts);
+    const displayableContacts = filteredContacts.filter((contact) => hasAnyMeaningfulContactValue(contact, visibleColumns));
+    if (!displayableContacts.length) {
+      App.setStatus("No displayable contacts after filtering empty rows.");
+      return;
+    }
+
+    state.displayedContacts = App.getSortedContacts(displayableContacts);
+    setContactsStatus(displayableContacts);
 
     const allShownSelected =
       state.displayedContacts.length > 0 && state.displayedContacts.every((c) => state.selectedKeys.has(App.contactKey(c)));
@@ -212,7 +242,7 @@
         <tr>
           <th class='sel'><input type='checkbox' id='selectAllShown' ${allShownSelected ? "checked" : ""} /></th>
           ${headerHtml}
-          <th class='actions'>Actions</th>
+          <th class='actions'>ACTIONS</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -375,7 +405,8 @@
       }
 
       state.currentColumns = response.columns || [];
-      state.currentContacts = dedupeContactsByRecordId(response.contacts || [], state.currentColumns);
+      const dedupedContacts = dedupeContactsByRecordId(response.contacts || [], state.currentColumns);
+      state.currentContacts = filterOutEmptyContacts(dedupedContacts, state.currentColumns);
       state.phoneColumnId = response.phoneColumnId || null;
       state.currentPortalId = (await App.getPortalId(tab)) || "";
 
