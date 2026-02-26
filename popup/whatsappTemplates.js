@@ -1,7 +1,6 @@
 (() => {
   const App = window.PopupApp;
   const { dom, state, constants } = App;
-  const TEMPLATE_PICK_VISIBLE_MAX = 5;
   const AUTOSAVE_DELAY_MS = 1000;
   let autosaveTimerId = null;
   let autosaveInFlight = false;
@@ -197,8 +196,6 @@
           return name.includes(query) || body.includes(query);
         })
       : templates;
-    const visibleTemplates = matchingTemplates.slice(0, TEMPLATE_PICK_VISIBLE_MAX);
-
     if (!templates.length) {
       dom.whatsappTemplatePickList.innerHTML = "<div class='email-template-empty'>No templates found. Add one via the WhatsApp icon.</div>";
       return;
@@ -208,7 +205,7 @@
       return;
     }
 
-    dom.whatsappTemplatePickList.innerHTML = visibleTemplates
+    dom.whatsappTemplatePickList.innerHTML = matchingTemplates
       .map((template) => {
         const preview = templatePreviewText(template);
         const isAppliedForContact = App.hasTemplateApplied("whatsapp", state.whatsappTemplatePickState.key, template.id);
