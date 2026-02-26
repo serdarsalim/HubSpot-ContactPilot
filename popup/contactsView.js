@@ -50,6 +50,24 @@
     App.setStatus(`Found ${total} contact(s).${selectedPart} ${newCount} new.`);
   }
 
+  function isNextActivityDateColumn(col) {
+    const label = String(col?.label || "").trim();
+    const id = String(col?.id || "").trim();
+    return /next\s*activity\s*date/i.test(label) || /next[_\s]*activity[_\s]*date/i.test(id);
+  }
+
+  function formatColumnLabel(col) {
+    const rawLabel = String(col?.label || "");
+    if (!isNextActivityDateColumn(col)) return rawLabel;
+    return rawLabel.replace(/\s*\(\s*(?:GMT|UTC)[^)]+\)\s*$/i, "").trim();
+  }
+
+  function formatColumnValue(col, rawValue) {
+    const value = String(rawValue || "-");
+    if (!isNextActivityDateColumn(col)) return value;
+    return value.replace(/\s+(?:GMT|UTC)\s*[+-]?\s*\d{1,2}(?::?\d{2})?\s*$/i, "").trim() || "-";
+  }
+
   function renderContacts() {
     dom.listEl.innerHTML = "";
     const filteredContacts = App.getFilteredContacts();
@@ -88,18 +106,22 @@
             : "col-fixed"
           : "col-fluid";
 
-        return `<th class='sortable ${App.columnClasses(col)} ${sizeClass}' data-sort-field='${App.escapeHtml(col.id)}' tabindex='0' aria-sort='${App.sortAria(col.id)}'>${App.escapeHtml(col.label)}${App.sortIndicator(col.id)}</th>`;
+        const displayLabel = formatColumnLabel(col);
+        return `<th class='sortable ${App.columnClasses(col)} ${sizeClass}' data-sort-field='${App.escapeHtml(col.id)}' tabindex='0' aria-sort='${App.sortAria(col.id)}'>${App.escapeHtml(displayLabel)}${App.sortIndicator(col.id)}</th>`;
       })
       .join("");
 
     const rowsHtml = state.displayedContacts
       .map((contact) => {
         const key = App.contactKey(contact);
+        const recordId = App.getRecordIdForContact(contact);
+        const quickNoteValue = App.getQuickNoteForRecordId(recordId);
         const checked = state.selectedKeys.has(key) ? "checked" : "";
 
         const cellsHtml = visibleColumns
           .map((col, index) => {
-            const value = contact.values?.[col.id] || "-";
+            const rawValue = contact.values?.[col.id] || "-";
+            const value = formatColumnValue(col, rawValue);
             const sizeClass = compactColumnLayout
               ? index === visibleColumns.length - 1
                 ? "col-elastic"
@@ -126,7 +148,6 @@
             }
 
             if (App.columnType(col) === "name") {
-              const recordId = App.getRecordIdForContact(contact);
               const contactUrl = App.buildContactUrl(recordId, state.currentPortalId);
               if (contactUrl) {
                 return `<td class='${css}'><a href='${App.escapeHtml(contactUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></td>`;
@@ -170,20 +191,14 @@
                   <path d='M4 8l8 5 8-5'></path>
                 </svg>
               </button>
-              <button
-                type='button'
-                class='row-action-btn row-notes-btn'
-                data-key='${App.escapeHtml(key)}'
-                aria-label='Notes'
-                title='Notes'
-              >
-                <svg viewBox='0 0 24 24' aria-hidden='true'>
-                  <path d='M4 3h12l4 4v14H4z'></path>
-                  <path d='M16 3v4h4'></path>
-                  <path d='M8 12h8'></path>
-                  <path d='M8 16h8'></path>
-                </svg>
-              </button>
+              <input
+                type='text'
+                class='row-quick-note-input'
+                data-record-id='${App.escapeHtml(recordId)}'
+                value='${App.escapeHtml(quickNoteValue)}'
+                aria-label='Quick note'
+                ${recordId ? "" : "disabled"}
+              />
             </span>
           </td>
         </tr>
@@ -226,21 +241,6 @@
         void App.persistSelectedKeysToSession();
         App.updateExportActionsVisibility();
         setContactsStatus(filteredContacts);
-      });
-    });
-
-    dom.listEl.querySelectorAll(".row-notes-btn").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const key = button.getAttribute("data-key");
-        if (!key) return;
-        const contact = displayedByKey.get(key);
-        const recordId = App.getRecordIdForContact(contact);
-        if (!recordId) {
-          App.openRecordIdRequiredDialog();
-          App.setStatus('Missing "Record ID" column. Add it in HubSpot Contacts list columns, then refresh Contact Point.');
-          return;
-        }
-        App.openNotesDialog(contact, recordId);
       });
     });
 
@@ -310,6 +310,19 @@
         } catch (_error) {
           App.setStatus("Could not copy phone number.");
         }
+      });
+    });
+
+    dom.listEl.querySelectorAll(".row-quick-note-input").forEach((input) => {
+      input.addEventListener("input", () => {
+        const recordId = String(input.getAttribute("data-record-id") || "").trim();
+        if (!recordId) return;
+        App.setQuickNoteForRecordId(recordId, input.value);
+      });
+      input.addEventListener("blur", () => {
+        const recordId = String(input.getAttribute("data-record-id") || "").trim();
+        if (!recordId) return;
+        App.setQuickNoteForRecordId(recordId, input.value);
       });
     });
 

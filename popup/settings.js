@@ -712,7 +712,8 @@
         constants.EMAIL_TEMPLATES_LOCAL_KEY,
         constants.WHATSAPP_TEMPLATES_LOCAL_KEY,
         constants.NOTE_TEMPLATES_LOCAL_KEY,
-        constants.TEMPLATE_USAGE_LOCAL_KEY
+        constants.TEMPLATE_USAGE_LOCAL_KEY,
+        constants.QUICK_NOTES_LOCAL_KEY
       ])
     ]);
     const saved = syncResult[constants.SETTINGS_KEY];
@@ -727,6 +728,7 @@
     const localWhatsappTemplates = localResult[constants.WHATSAPP_TEMPLATES_LOCAL_KEY];
     const localNoteTemplates = localResult[constants.NOTE_TEMPLATES_LOCAL_KEY];
     const savedTemplateUsage = localResult[constants.TEMPLATE_USAGE_LOCAL_KEY];
+    const savedQuickNotes = localResult[constants.QUICK_NOTES_LOCAL_KEY];
     const hasLocalEmailTemplates = Array.isArray(localEmailTemplates);
     const hasLocalWhatsappTemplates = Array.isArray(localWhatsappTemplates);
     const hasLocalNoteTemplates = Array.isArray(localNoteTemplates);
@@ -736,6 +738,7 @@
     );
     const noteTemplates = App.normalizeNoteTemplates(hasLocalNoteTemplates ? localNoteTemplates : legacySyncNoteTemplates);
     state.templateUsageByContact = App.normalizeTemplateUsageMap(savedTemplateUsage);
+    state.quickNotesByRecordId = App.normalizeQuickNotesMap(savedQuickNotes);
     state.settings = {
       ...constants.DEFAULT_SETTINGS,
       ...savedWithoutLegacy,

@@ -432,9 +432,9 @@
 
       th.actions,
       td.actions {
-        width: 300px;
-        min-width: 300px;
-        max-width: 300px;
+        width: 340px;
+        min-width: 340px;
+        max-width: 340px;
         white-space: nowrap;
         border-left: 1px solid #edf2f7;
       }
@@ -474,7 +474,7 @@
         width: 100%;
         align-items: center;
         justify-content: flex-start;
-        gap: 12px;
+        gap: 10px;
       }
 
       .row-whatsapp-btn {
@@ -483,6 +483,30 @@
 
       body[data-theme="dark"] .row-whatsapp-btn {
         color: #61d992;
+      }
+
+      .row-quick-note-input {
+        width: 200px;
+        min-width: 200px;
+        max-width: 200px;
+        border: 0;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.52);
+        color: #41556a;
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 8px;
+        line-height: 1.35;
+      }
+
+      .row-quick-note-input:focus {
+        outline: 0;
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .row-quick-note-input:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
       th.name,
@@ -1639,6 +1663,16 @@
       body[data-theme="dark"] .status-action,
       body[data-theme="dark"] .email-template-pick-name {
         color: #b7d4f8;
+      }
+
+      body[data-theme="dark"] .row-quick-note-input {
+        border: 0;
+        background: rgba(27, 42, 60, 0.68);
+        color: #afc7e2;
+      }
+
+      body[data-theme="dark"] .row-quick-note-input:focus {
+        background: rgba(34, 54, 77, 0.86);
       }
 
       body[data-theme="dark"] .phone-copy-btn {

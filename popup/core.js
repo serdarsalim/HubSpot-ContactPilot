@@ -138,6 +138,7 @@
   const WHATSAPP_TEMPLATES_LOCAL_KEY = "popupWhatsappTemplates";
   const NOTE_TEMPLATES_LOCAL_KEY = "popupNoteTemplates";
   const TEMPLATE_USAGE_LOCAL_KEY = "popupTemplateUsageByContact";
+  const QUICK_NOTES_LOCAL_KEY = "popupQuickNotesByRecordId";
   const SELECTED_KEYS_SESSION_KEY = "popupSelectedContactKeys";
   const LEGACY_NOTE_TEXT = "Reached out on WhatsApp";
   const DEFAULT_EMAIL_TEMPLATE = {
@@ -206,9 +207,11 @@
       query: ""
     },
     contactsSearchQuery: "",
-    templateUsageByContact: {}
+    templateUsageByContact: {},
+    quickNotesByRecordId: {}
   };
   let templateUsageSaveTimerId = null;
+  let quickNotesSaveTimerId = null;
 
   function columnType(col) {
     if (col.id === state.phoneColumnId) return "phone";
@@ -594,6 +597,55 @@
     }, 180);
   }
 
+  function normalizeQuickNotesMap(rawQuickNotes) {
+    if (!rawQuickNotes || typeof rawQuickNotes !== "object") return {};
+    const normalized = {};
+
+    for (const [recordIdInput, noteInput] of Object.entries(rawQuickNotes)) {
+      const recordId = String(recordIdInput || "").replace(/\D/g, "");
+      if (!recordId) continue;
+      const note = String(noteInput || "").trim();
+      if (!note) continue;
+      normalized[recordId] = note;
+    }
+
+    return normalized;
+  }
+
+  function scheduleQuickNotesPersist() {
+    if (quickNotesSaveTimerId) {
+      clearTimeout(quickNotesSaveTimerId);
+      quickNotesSaveTimerId = null;
+    }
+    quickNotesSaveTimerId = setTimeout(() => {
+      quickNotesSaveTimerId = null;
+      const payload = normalizeQuickNotesMap(state.quickNotesByRecordId);
+      state.quickNotesByRecordId = payload;
+      void chrome.storage.local.set({ [QUICK_NOTES_LOCAL_KEY]: payload });
+    }, 220);
+  }
+
+  function getQuickNoteForRecordId(recordIdInput) {
+    const recordId = String(recordIdInput || "").replace(/\D/g, "");
+    if (!recordId) return "";
+    return String(state.quickNotesByRecordId?.[recordId] || "");
+  }
+
+  function setQuickNoteForRecordId(recordIdInput, noteInput) {
+    const recordId = String(recordIdInput || "").replace(/\D/g, "");
+    if (!recordId) return;
+    const note = String(noteInput || "").trim();
+    if (!note) {
+      if (!Object.prototype.hasOwnProperty.call(state.quickNotesByRecordId, recordId)) return;
+      delete state.quickNotesByRecordId[recordId];
+      scheduleQuickNotesPersist();
+      return;
+    }
+    if (state.quickNotesByRecordId[recordId] === note) return;
+    state.quickNotesByRecordId[recordId] = note;
+    scheduleQuickNotesPersist();
+  }
+
   function getTemplateUsageForContact(contactKeyInput) {
     const key = String(contactKeyInput || "").trim();
     if (!key) return null;
@@ -704,6 +756,7 @@
     WHATSAPP_TEMPLATES_LOCAL_KEY,
     NOTE_TEMPLATES_LOCAL_KEY,
     TEMPLATE_USAGE_LOCAL_KEY,
+    QUICK_NOTES_LOCAL_KEY,
     SELECTED_KEYS_SESSION_KEY,
     LEGACY_NOTE_TEXT,
     DEFAULT_EMAIL_TEMPLATE,
@@ -756,6 +809,9 @@
     normalizeTemplateUsageMap,
     markTemplateApplied,
     hasTemplateApplied,
+    normalizeQuickNotesMap,
+    getQuickNoteForRecordId,
+    setQuickNoteForRecordId,
     updateExportActionsVisibility,
     persistSelectedKeysToSession,
     restoreSelectedKeysFromSession,
