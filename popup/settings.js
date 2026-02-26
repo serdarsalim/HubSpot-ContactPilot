@@ -487,7 +487,12 @@
   }
 
   function closeTemplateImportReview() {
-    if (dom.templateImportOverlay) dom.templateImportOverlay.classList.remove("open");
+    if (dom.templateImportOverlay) {
+      App.blurFocusedElementWithin(dom.templateImportOverlay);
+      App.preserveScrollPosition(() => {
+        dom.templateImportOverlay.classList.remove("open");
+      });
+    }
     pendingImportTemplates = [];
     if (dom.templateImportListEl) dom.templateImportListEl.innerHTML = "";
     if (dom.templateImportSummaryEl) dom.templateImportSummaryEl.textContent = "";

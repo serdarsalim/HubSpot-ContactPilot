@@ -549,12 +549,20 @@
 
       th.phone,
       td.phone {
-        width: 120px;
-        min-width: 120px;
-        max-width: 120px;
+        width: 190px;
+        min-width: 190px;
+        max-width: 190px;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow: visible;
+        text-overflow: clip;
+      }
+
+      .phone-cell-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        min-width: 0;
       }
 
       td.phone a {
@@ -576,6 +584,55 @@
         outline: 2px solid #0b66c3;
         outline-offset: 2px;
         border-radius: 4px;
+      }
+
+      .phone-cell-wrap .phone-value {
+        display: inline-block;
+        min-width: 0;
+        max-width: calc(100% - 22px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .phone-copy-btn {
+        border: 0;
+        background: transparent;
+        color: #4f6274;
+        padding: 0;
+        margin: 0;
+        width: 16px;
+        min-width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: color 140ms ease;
+      }
+
+      .phone-copy-btn:hover {
+        color: #0b66c3;
+      }
+
+      .phone-copy-btn.is-copied {
+        color: #0f8f45;
+      }
+
+      .phone-copy-btn:focus-visible {
+        outline: 2px solid #0b66c3;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      .phone-copy-btn svg {
+        width: 13px;
+        height: 13px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
 
       th.possibility,
@@ -678,6 +735,12 @@
       }
 
       .active-tab-inline-link {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        cursor: pointer;
         color: #0b66c3;
         text-decoration: none;
         font-weight: 600;
@@ -694,6 +757,11 @@
       }
 
       .active-tab-whatsapp-link {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1554,6 +1622,18 @@
       body[data-theme="dark"] .status-action,
       body[data-theme="dark"] .email-template-pick-name {
         color: #b7d4f8;
+      }
+
+      body[data-theme="dark"] .phone-copy-btn {
+        color: #9ab0c7;
+      }
+
+      body[data-theme="dark"] .phone-copy-btn:hover {
+        color: #93c5fd;
+      }
+
+      body[data-theme="dark"] .phone-copy-btn.is-copied {
+        color: #61d992;
       }
 
       body[data-theme="dark"] .email-template-pick-preview,

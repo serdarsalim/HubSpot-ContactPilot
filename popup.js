@@ -210,6 +210,9 @@
     if (typeof App.initAnalytics === "function") {
       await App.initAnalytics();
     }
+    if (typeof App.restoreSelectedKeysFromSession === "function") {
+      await App.restoreSelectedKeysFromSession();
+    }
     await App.loadSettings();
     await App.loadContacts({ loadAll: true });
     App.updateStickyHeadOffset();

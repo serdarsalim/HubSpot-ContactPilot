@@ -53,8 +53,6 @@
   function renderContacts() {
     dom.listEl.innerHTML = "";
     const filteredContacts = App.getFilteredContacts();
-    const visibleKeys = new Set(filteredContacts.map((c) => App.contactKey(c)));
-    state.selectedKeys = new Set([...state.selectedKeys].filter((key) => visibleKeys.has(key)));
     App.updateExportActionsVisibility();
 
     if (!filteredContacts.length) {
@@ -109,8 +107,22 @@
               : "col-fluid";
             const css = `${App.columnClasses(col)} ${sizeClass}`;
 
-            if (col.id === state.phoneColumnId && contact.waUrl) {
-              return `<td class='${css}'><a class='row-wa-link' href='${App.escapeHtml(contact.waUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></td>`;
+            if (col.id === state.phoneColumnId) {
+              const phoneText = String(contact.values?.[col.id] || "").trim();
+              const copyButton = phoneText
+                ? `<button type='button' class='phone-copy-btn row-copy-phone-btn' data-phone='${App.escapeHtml(phoneText)}' aria-label='Copy phone number' title='Copy phone number'>
+                    <svg viewBox='0 0 24 24' aria-hidden='true'>
+                      <rect x='9' y='9' width='11' height='11' rx='2'></rect>
+                      <path d='M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1'></path>
+                    </svg>
+                  </button>`
+                : "";
+
+              const phoneContent = contact.waUrl
+                ? `<a class='row-wa-link phone-value' href='${App.escapeHtml(contact.waUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a>`
+                : `<span class='phone-value'>${App.escapeHtml(value)}</span>`;
+
+              return `<td class='${css}'><span class='phone-cell-wrap'>${phoneContent}${copyButton}</span></td>`;
             }
 
             if (App.columnType(col) === "name") {
@@ -211,6 +223,7 @@
         if (!key) return;
         if (input.checked) state.selectedKeys.add(key);
         else state.selectedKeys.delete(key);
+        void App.persistSelectedKeysToSession();
         App.updateExportActionsVisibility();
         setContactsStatus(filteredContacts);
       });
@@ -274,6 +287,32 @@
       });
     });
 
+    dom.listEl.querySelectorAll(".row-copy-phone-btn").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const phoneText = String(button.getAttribute("data-phone") || "").trim();
+        if (!phoneText) return;
+        try {
+          await App.copyTextToClipboard(phoneText);
+          if (button.dataset.copyTimerId) {
+            clearTimeout(Number(button.dataset.copyTimerId));
+            delete button.dataset.copyTimerId;
+          }
+          button.classList.add("is-copied");
+          button.setAttribute("title", "Copied");
+          button.setAttribute("aria-label", "Copied");
+          const timerId = setTimeout(() => {
+            button.classList.remove("is-copied");
+            button.setAttribute("title", "Copy phone number");
+            button.setAttribute("aria-label", "Copy phone number");
+            delete button.dataset.copyTimerId;
+          }, 900);
+          button.dataset.copyTimerId = String(timerId);
+        } catch (_error) {
+          App.setStatus("Could not copy phone number.");
+        }
+      });
+    });
+
     const selectAllShown = document.getElementById("selectAllShown");
     if (selectAllShown) {
       selectAllShown.addEventListener("change", () => {
@@ -282,6 +321,7 @@
           if (selectAllShown.checked) state.selectedKeys.add(key);
           else state.selectedKeys.delete(key);
         });
+        void App.persistSelectedKeysToSession();
         renderContacts();
       });
     }
@@ -331,7 +371,6 @@
         await App.persistSyncSettings(state.settings);
       }
 
-      state.selectedKeys = new Set();
       state.sortState = { field: null, direction: "asc" };
       renderContacts();
       if (typeof App.trackEvent === "function") {

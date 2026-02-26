@@ -138,6 +138,7 @@
   const WHATSAPP_TEMPLATES_LOCAL_KEY = "popupWhatsappTemplates";
   const NOTE_TEMPLATES_LOCAL_KEY = "popupNoteTemplates";
   const TEMPLATE_USAGE_LOCAL_KEY = "popupTemplateUsageByContact";
+  const SELECTED_KEYS_SESSION_KEY = "popupSelectedContactKeys";
   const LEGACY_NOTE_TEXT = "Reached out on WhatsApp";
   const DEFAULT_EMAIL_TEMPLATE = {
     id: "template_default",
@@ -628,6 +629,55 @@
     updateStickyHeadOffset();
   }
 
+  async function persistSelectedKeysToSession() {
+    const keys = [...state.selectedKeys].map((key) => String(key || "").trim()).filter(Boolean);
+    try {
+      if (chrome?.storage?.session && typeof chrome.storage.session.set === "function") {
+        await chrome.storage.session.set({ [SELECTED_KEYS_SESSION_KEY]: keys });
+      }
+    } catch (_error) {}
+  }
+
+  async function restoreSelectedKeysFromSession() {
+    try {
+      if (chrome?.storage?.session && typeof chrome.storage.session.get === "function") {
+        const raw = await chrome.storage.session.get(SELECTED_KEYS_SESSION_KEY);
+        const next = Array.isArray(raw?.[SELECTED_KEYS_SESSION_KEY]) ? raw[SELECTED_KEYS_SESSION_KEY] : [];
+        state.selectedKeys = new Set(next.map((key) => String(key || "").trim()).filter(Boolean));
+      }
+    } catch (_error) {}
+  }
+
+  function blurFocusedElementWithin(container) {
+    if (!container) return;
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLElement)) return;
+    if (container.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }
+
+  function preserveScrollPosition(callback) {
+    const fn = typeof callback === "function" ? callback : () => {};
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const scrollLeft = Number(scrollingElement?.scrollLeft || window.scrollX || 0);
+    const scrollTop = Number(scrollingElement?.scrollTop || window.scrollY || 0);
+
+    fn();
+
+    const restoreScroll = () => {
+      if (scrollingElement) {
+        scrollingElement.scrollLeft = scrollLeft;
+        scrollingElement.scrollTop = scrollTop;
+      }
+      window.scrollTo(scrollLeft, scrollTop);
+    };
+
+    restoreScroll();
+    setTimeout(restoreScroll, 0);
+    requestAnimationFrame(restoreScroll);
+  }
+
   function openRecordIdRequiredDialog() {
     if (dom.recordIdRequiredMessageEl) {
       dom.recordIdRequiredMessageEl.textContent =
@@ -640,7 +690,10 @@
 
   function closeRecordIdRequiredDialog() {
     if (dom.recordIdRequiredOverlay) {
-      dom.recordIdRequiredOverlay.classList.remove("open");
+      blurFocusedElementWithin(dom.recordIdRequiredOverlay);
+      preserveScrollPosition(() => {
+        dom.recordIdRequiredOverlay.classList.remove("open");
+      });
     }
   }
 
@@ -651,6 +704,7 @@
     WHATSAPP_TEMPLATES_LOCAL_KEY,
     NOTE_TEMPLATES_LOCAL_KEY,
     TEMPLATE_USAGE_LOCAL_KEY,
+    SELECTED_KEYS_SESSION_KEY,
     LEGACY_NOTE_TEXT,
     DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_WHATSAPP_TEMPLATE,
@@ -703,6 +757,10 @@
     markTemplateApplied,
     hasTemplateApplied,
     updateExportActionsVisibility,
+    persistSelectedKeysToSession,
+    restoreSelectedKeysFromSession,
+    blurFocusedElementWithin,
+    preserveScrollPosition,
     openRecordIdRequiredDialog,
     closeRecordIdRequiredDialog
   });

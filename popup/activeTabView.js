@@ -97,44 +97,70 @@
       .trim();
   }
 
-  function bindContactCardLinks(context) {
+  function getPhoneDigitsForContact(contact, phoneRawValue) {
+    const directDigits = String(contact?.phoneDigits || "").replace(/\D/g, "");
+    if (directDigits) return directDigits;
+
+    const waUrl = String(contact?.waUrl || "");
+    if (waUrl) {
+      try {
+        const parsed = new URL(waUrl);
+        const fromParam = String(parsed.searchParams.get("phone") || "").replace(/\D/g, "");
+        if (fromParam) return fromParam;
+      } catch (_error) {}
+    }
+
+    return String(phoneRawValue || "").replace(/\D/g, "");
+  }
+
+  function buildBlankWhatsappUrl(contact, phoneRawValue) {
+    const phoneDigits = getPhoneDigitsForContact(contact, phoneRawValue);
+    if (!phoneDigits) return "";
+    return `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number`;
+  }
+
+  function getActiveContactContext() {
+    const context = state.activeTabContext;
     const isContact = String(context?.kind || "") === "contact" && !!context?.contact;
-    if (dom.activeTabEmailEl) {
-      const emailTemplateLink = dom.activeTabEmailEl.querySelector("[data-active-tab-email-template]");
-      if (emailTemplateLink instanceof HTMLElement) {
-        emailTemplateLink.addEventListener("click", (event) => {
-          event.preventDefault();
-          if (!isContact) return;
-          const key = activeTabKey(context);
-          App.openEmailTemplatePicker(context.contact, key);
-        });
-      }
-    }
+    return isContact ? context : null;
+  }
 
-    if (dom.activeTabLatestNoteEl) {
-      const notesLink = dom.activeTabLatestNoteEl.querySelector("[data-active-tab-open-notes]");
-      if (notesLink instanceof HTMLElement) {
-        notesLink.addEventListener("click", (event) => {
-          event.preventDefault();
-          if (!isContact) return;
-          const recordId = String(context?.recordId || "").replace(/\D/g, "");
-          if (!recordId) return;
-          App.openNotesDialog(context.contact, recordId);
-        });
-      }
-    }
+  function wireActiveTabQuickActions() {
+    if (!dom.activeTabPageEl || dom.activeTabPageEl.dataset.quickActionsBound === "1") return;
+    dom.activeTabPageEl.dataset.quickActionsBound = "1";
 
-    if (dom.activeTabPhoneEl) {
-      const whatsappTemplateLink = dom.activeTabPhoneEl.querySelector("[data-active-tab-whatsapp-template]");
-      if (whatsappTemplateLink instanceof HTMLElement) {
-        whatsappTemplateLink.addEventListener("click", (event) => {
-          event.preventDefault();
-          if (!isContact) return;
-          const key = activeTabKey(context);
-          App.openWhatsappTemplatePicker(context.contact, key);
-        });
+    dom.activeTabPageEl.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const emailTrigger = target.closest("[data-active-tab-email-template]");
+      if (emailTrigger) {
+        event.preventDefault();
+        const context = getActiveContactContext();
+        if (!context) return;
+        App.openEmailTemplatePicker(context.contact, activeTabKey(context));
+        return;
       }
-    }
+
+      const notesTrigger = target.closest("[data-active-tab-open-notes]");
+      if (notesTrigger) {
+        event.preventDefault();
+        const context = getActiveContactContext();
+        if (!context) return;
+        const recordId = String(context.recordId || "").replace(/\D/g, "");
+        if (!recordId) return;
+        App.openNotesDialog(context.contact, recordId);
+        return;
+      }
+
+      const whatsappTrigger = target.closest("[data-active-tab-whatsapp-template]");
+      if (whatsappTrigger) {
+        event.preventDefault();
+        const context = getActiveContactContext();
+        if (!context) return;
+        App.openWhatsappTemplatePicker(context.contact, activeTabKey(context));
+      }
+    });
   }
 
   function renderActiveTabContext() {
@@ -149,20 +175,27 @@
     const latestTask = String(context?.latestTask || context?.recentTasks?.[0] || "").trim();
     const phoneRawValue = contact ? String(contact.values?.[state.phoneColumnId || "phone"] || contact.values?.phone || "") : "";
     const phoneValue = normalizePhoneDisplay(phoneRawValue);
+    const blankWhatsappUrl = buildBlankWhatsappUrl(contact, phoneRawValue);
 
     if (dom.activeTabPhoneEl) {
       if (kind === "contact" && contact) {
         dom.activeTabPhoneEl.innerHTML = `
           <span class="active-tab-phone-wrap">
-            <span>${App.escapeHtml(phoneValue || "-")}</span>
-            <a href="#" class="active-tab-whatsapp-link" data-active-tab-whatsapp-template="1" aria-label="WhatsApp templates" title="WhatsApp templates">
+            ${
+              blankWhatsappUrl && phoneValue
+                ? `<a href="${App.escapeHtml(blankWhatsappUrl)}" target="_blank" rel="noopener noreferrer" class="active-tab-phone-link" title="Open WhatsApp">${App.escapeHtml(
+                    phoneValue
+                  )}</a>`
+                : `<span>${App.escapeHtml(phoneValue || "-")}</span>`
+            }
+            <button type="button" class="active-tab-whatsapp-link" data-active-tab-whatsapp-template="1" aria-label="WhatsApp templates" title="WhatsApp templates">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 4c4.7 0 8.5 3.4 8.5 7.5S16.7 19 12 19c-1 0-2-.2-2.9-.5L4 20l1.4-3.8C4.5 14.9 4 13.2 4 11.5 4 7.4 7.8 4 12 4z"></path>
                 <circle cx="9" cy="11.5" r="0.9"></circle>
                 <circle cx="12" cy="11.5" r="0.9"></circle>
                 <circle cx="15" cy="11.5" r="0.9"></circle>
               </svg>
-            </a>
+            </button>
           </span>
         `;
       } else {
@@ -172,14 +205,14 @@
     if (dom.activeTabEmailEl) {
       if (emailValue) {
         if (kind === "contact" && contact) {
-          dom.activeTabEmailEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">${App.escapeHtml(
+          dom.activeTabEmailEl.innerHTML = `<button type="button" class="active-tab-inline-link" data-active-tab-email-template="1">${App.escapeHtml(
             emailValue
-          )}</a>`;
+          )}</button>`;
         } else {
           dom.activeTabEmailEl.textContent = emailValue;
         }
       } else if (kind === "contact" && contact) {
-        dom.activeTabEmailEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-email-template="1">Use Email Template</a>`;
+        dom.activeTabEmailEl.innerHTML = `<button type="button" class="active-tab-inline-link" data-active-tab-email-template="1">Use Email Template</button>`;
       } else {
         dom.activeTabEmailEl.textContent = "-";
       }
@@ -187,13 +220,14 @@
     if (dom.activeTabLatestNoteEl) {
       const linkLabel = latestNote || "Open Notes";
       if (kind === "contact" && contact) {
-        dom.activeTabLatestNoteEl.innerHTML = `<a href="#" class="active-tab-inline-link" data-active-tab-open-notes="1">${App.escapeHtml(linkLabel)}</a>`;
+        dom.activeTabLatestNoteEl.innerHTML = `<button type="button" class="active-tab-inline-link" data-active-tab-open-notes="1">${App.escapeHtml(
+          linkLabel
+        )}</button>`;
       } else {
         dom.activeTabLatestNoteEl.textContent = latestNote || "No recent notes";
       }
     }
     setMultilineText(dom.activeTabLatestTaskEl, latestTask, "No recent tasks");
-    bindContactCardLinks(context);
   }
 
   async function loadActiveTabContext() {
@@ -286,4 +320,6 @@
     renderActiveTabContext,
     loadActiveTabContext
   });
+
+  wireActiveTabQuickActions();
 })();

@@ -246,7 +246,12 @@
   }
 
   function closeWhatsappTemplatePicker() {
-    if (dom.whatsappTemplatePickOverlay) dom.whatsappTemplatePickOverlay.classList.remove("open");
+    if (dom.whatsappTemplatePickOverlay) {
+      App.blurFocusedElementWithin(dom.whatsappTemplatePickOverlay);
+      App.preserveScrollPosition(() => {
+        dom.whatsappTemplatePickOverlay.classList.remove("open");
+      });
+    }
     state.whatsappTemplatePickState = { key: "", contact: null, query: "" };
     if (dom.whatsappTemplatePickSearchInput) dom.whatsappTemplatePickSearchInput.value = "";
   }
@@ -291,8 +296,6 @@
     }
 
     const resolvedKey = String(key || App.contactKey(contact));
-    state.selectedKeys = new Set([resolvedKey]);
-    App.renderContacts();
     App.setStatus(`Opening WhatsApp for ${App.getContactDisplayName(contact)} with \"${template.name}\"...`);
 
     try {

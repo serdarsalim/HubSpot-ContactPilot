@@ -148,7 +148,10 @@
 
   function closeNotesDialog() {
     if (!dom.notesOverlay) return;
-    dom.notesOverlay.classList.remove("open");
+    App.blurFocusedElementWithin(dom.notesOverlay);
+    App.preserveScrollPosition(() => {
+      dom.notesOverlay.classList.remove("open");
+    });
     state.notesLoadToken += 1;
   }
 
