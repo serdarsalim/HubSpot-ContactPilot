@@ -8,6 +8,7 @@
     "blocks",
     "bold italic underline strikethrough",
     "bullist numlist",
+    "cp_addlink cp_openlink cp_unlink",
     "forecolor backcolor",
     "alignleft aligncenter alignright",
     "removeformat",
@@ -58,6 +59,88 @@
     const tiny = window.tinymce;
     if (!tiny || typeof tiny.get !== "function") return null;
     return tiny.get(BODY_EDITOR_ID) || null;
+  }
+
+  function escapeHtmlAttr(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function getAnchorFromNode(node) {
+    const element = node && typeof node === "object" && node.nodeType === 1 ? node : null;
+    if (!element || typeof element.closest !== "function") return null;
+    const anchor = element.closest("a[href]");
+    return anchor && anchor.nodeType === 1 ? anchor : null;
+  }
+
+  function getSelectedAnchor(editor) {
+    const selectedNode = editor?.selection?.getNode?.();
+    return getAnchorFromNode(selectedNode);
+  }
+
+  function normalizeLinkHref(rawValue) {
+    const value = String(rawValue || "").trim();
+    if (!value) return "";
+    if (/^(https?:|mailto:|tel:|sms:)/i.test(value)) return value;
+    if (/^\/|^#|^\?/i.test(value)) return value;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+    return `https://${value}`;
+  }
+
+  function removeLinkAtSelection(editor) {
+    const anchor = getSelectedAnchor(editor);
+    if (!anchor) return false;
+    editor.undoManager.transact(() => {
+      const parent = anchor.parentNode;
+      if (!parent) return;
+      while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor);
+      parent.removeChild(anchor);
+    });
+    return true;
+  }
+
+  function upsertLinkAtSelection(editor) {
+    const anchor = getSelectedAnchor(editor);
+    const currentHref = String(anchor?.getAttribute("href") || "").trim();
+    const rawHref = window.prompt("Enter link URL", currentHref || "https://");
+    if (rawHref === null) return;
+    const href = normalizeLinkHref(rawHref);
+    if (!href) {
+      removeLinkAtSelection(editor);
+      return;
+    }
+
+    editor.undoManager.transact(() => {
+      if (anchor) {
+        anchor.setAttribute("href", href);
+        return;
+      }
+
+      const selectionHtml = String(editor.selection?.getContent({ format: "html" }) || "").trim();
+      const selectionText = String(editor.selection?.getContent({ format: "text" }) || "").trim();
+      if (selectionHtml) {
+        editor.selection.setContent(`<a href="${escapeHtmlAttr(href)}">${selectionHtml}</a>`);
+        return;
+      }
+
+      const fallbackText = selectionText || href;
+      const rawText = window.prompt("Enter link text", fallbackText);
+      if (rawText === null) return;
+      const text = String(rawText || "").trim() || href;
+      editor.insertContent(`<a href="${escapeHtmlAttr(href)}">${App.escapeHtml(text)}</a>`);
+    });
+  }
+
+  function openSelectedLink(editor) {
+    const anchor = getSelectedAnchor(editor);
+    if (!anchor) return false;
+    const href = normalizeLinkHref(anchor.getAttribute("href"));
+    if (!href) return false;
+    window.open(href, "_blank", "noopener,noreferrer");
+    return true;
   }
 
   function setEmailTemplateSaveState(stateKey, text) {
@@ -219,10 +302,42 @@
         toolbar: TINYMCE_TOOLBAR_ORDER,
         skin: "oxide",
         content_css: "default",
+        content_style: "a[href] { cursor: pointer; }",
         setup(editor) {
+          editor.ui.registry.addButton("cp_addlink", {
+            icon: "link",
+            tooltip: "Add/Edit Link",
+            onAction: () => upsertLinkAtSelection(editor)
+          });
+          editor.ui.registry.addButton("cp_unlink", {
+            icon: "unlink",
+            tooltip: "Remove Link",
+            onAction: () => {
+              removeLinkAtSelection(editor);
+            }
+          });
+          editor.ui.registry.addButton("cp_openlink", {
+            icon: "new-tab",
+            tooltip: "Open Link",
+            onAction: () => {
+              if (!openSelectedLink(editor)) {
+                App.setStatus("Place cursor on a link to open it.");
+              }
+            }
+          });
           editor.on("change input undo redo keyup", () => {
             if (state.syncingEmailTemplateForm) return;
             upsertActiveTemplateFromForm();
+          });
+          editor.on("click", (event) => {
+            const anchor = getAnchorFromNode(event.target);
+            if (!anchor) return;
+            event.preventDefault();
+            if (event.metaKey || event.ctrlKey) {
+              openSelectedLink(editor);
+              return;
+            }
+            upsertLinkAtSelection(editor);
           });
           editor.on("blur", () => {
             void flushEmailTemplateAutosave({ showToast: false });
@@ -392,7 +507,12 @@
   }
 
   function closeEmailTemplatePicker() {
-    if (dom.emailTemplatePickOverlay) dom.emailTemplatePickOverlay.classList.remove("open");
+    if (dom.emailTemplatePickOverlay) {
+      App.blurFocusedElementWithin(dom.emailTemplatePickOverlay);
+      App.preserveScrollPosition(() => {
+        dom.emailTemplatePickOverlay.classList.remove("open");
+      });
+    }
     state.emailTemplatePickState = { key: "", contact: null, query: "" };
     if (dom.emailTemplatePickSearchInput) dom.emailTemplatePickSearchInput.value = "";
   }
@@ -422,8 +542,6 @@
     }
 
     const resolvedKey = String(key || App.contactKey(contact));
-    state.selectedKeys = new Set([resolvedKey]);
-    App.renderContacts();
     App.setStatus(`Opening ${App.getContactDisplayName(contact)} and applying "${template.name}"...`);
 
     try {
