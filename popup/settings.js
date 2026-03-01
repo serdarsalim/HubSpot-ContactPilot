@@ -73,7 +73,7 @@
 
     const orgName = auth.organizationName || auth.organizationSlug || auth.organizationId;
     const syncedAt = formatCloudSyncLabel(state.cloud.meta);
-    dom.cloudConnectionStatusEl.textContent = `Cloud templates: connected to ${orgName} via ${auth.apiBaseUrl} (last sync: ${syncedAt})`;
+    dom.cloudConnectionStatusEl.textContent = "Cloud templates: connected to " + orgName + " (last sync: " + syncedAt + ")";
   }
 
   function rerenderTemplateViewsForCloudChange() {
@@ -656,8 +656,7 @@
 
   async function saveCloudApiToken() {
     const rawToken = String(dom.cloudApiTokenInput?.value || "").trim();
-    const rawApiBaseUrl = String(dom.cloudApiBaseUrlInput?.value || "").trim();
-    const apiBaseUrl = App.normalizeCloudApiBaseUrl(rawApiBaseUrl);
+    const apiBaseUrl = constants.CLOUD_API_BASE_URL;
 
     if (!rawToken) {
       await clearCloudConnection({ showToast: true, statusMessage: "Cloud API token removed." });
@@ -703,7 +702,7 @@
       await loadCloudCacheFromStorage(state.cloud.auth);
       const rawReason = String(error?.message || "Could not validate cloud API token.");
       const reason = rawReason.includes("404")
-        ? `${rawReason}. Check Cloud API URL and ensure the backend is running/deployed.`
+        ? rawReason + ". Ensure cloud backend is deployed."
         : rawReason;
       renderCloudConnectionStatus(`Cloud templates: ${reason}`);
       App.setStatus(`Cloud token failed: ${reason}`);
