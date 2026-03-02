@@ -142,7 +142,7 @@
       dom.whatsappTemplateBodyInput.disabled = nextReadOnly;
     }
     if (dom.deleteWhatsappTemplateBtn) dom.deleteWhatsappTemplateBtn.hidden = nextReadOnly;
-    setWhatsappTemplateSaveState("saved", nextReadOnly ? "Cloud read-only" : "Saved");
+    setWhatsappTemplateSaveState("saved", nextReadOnly ? ("Managed by " + String(state.cloud?.auth?.organizationName || state.cloud?.auth?.organizationSlug || state.cloud?.auth?.organizationId || "Cloud")) : "Saved");
   }
 
   function renderWhatsappTemplatesList() {
@@ -226,6 +226,12 @@
   function deleteActiveWhatsappTemplateDraft() {
     if (typeof App.isCloudTemplateId === "function" && App.isCloudTemplateId(state.activeWhatsappTemplateId)) return;
     if (!state.activeWhatsappTemplateId) return;
+
+    const active = getActiveWhatsappTemplateDraft();
+    const templateName = String(active?.name || "this template");
+    const confirmed = window.confirm("Delete " + templateName + "?");
+    if (!confirmed) return;
+
     state.whatsappTemplatesDraft = state.whatsappTemplatesDraft.filter((template) => template.id !== state.activeWhatsappTemplateId);
     if (!state.whatsappTemplatesDraft.length) {
       state.whatsappTemplatesDraft = [{ ...constants.DEFAULT_WHATSAPP_TEMPLATE, id: App.makeTemplateId() }];
@@ -233,6 +239,10 @@
     state.activeWhatsappTemplateId = state.whatsappTemplatesDraft[0].id;
     renderWhatsappTemplatesPage();
     scheduleWhatsappTemplateAutosave();
+
+    if (typeof App.showToast === "function") {
+      App.showToast("Template deleted.");
+    }
   }
 
   function renderWhatsappTemplatePickerOptions() {

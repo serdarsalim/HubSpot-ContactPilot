@@ -138,7 +138,7 @@
       dom.noteTemplateBodyInput.disabled = nextReadOnly;
     }
     if (dom.deleteNoteTemplateBtn) dom.deleteNoteTemplateBtn.hidden = nextReadOnly;
-    setNoteTemplateSaveState("saved", nextReadOnly ? "Cloud read-only" : "Saved");
+    setNoteTemplateSaveState("saved", nextReadOnly ? ("Managed by " + String(state.cloud?.auth?.organizationName || state.cloud?.auth?.organizationSlug || state.cloud?.auth?.organizationId || "Cloud")) : "Saved");
   }
 
   function renderNoteTemplatesList() {
@@ -222,6 +222,12 @@
   function deleteActiveNoteTemplateDraft() {
     if (typeof App.isCloudTemplateId === "function" && App.isCloudTemplateId(state.activeNoteTemplateId)) return;
     if (!state.activeNoteTemplateId) return;
+
+    const active = getActiveNoteTemplateDraft();
+    const templateName = String(active?.name || "this template");
+    const confirmed = window.confirm("Delete " + templateName + "?");
+    if (!confirmed) return;
+
     state.noteTemplatesDraft = state.noteTemplatesDraft.filter((template) => template.id !== state.activeNoteTemplateId);
     if (!state.noteTemplatesDraft.length) {
       state.noteTemplatesDraft = [{ ...constants.DEFAULT_NOTE_TEMPLATE, id: App.makeTemplateId() }];
@@ -229,6 +235,10 @@
     state.activeNoteTemplateId = state.noteTemplatesDraft[0].id;
     renderNoteTemplatesPage();
     scheduleNoteTemplateAutosave();
+
+    if (typeof App.showToast === "function") {
+      App.showToast("Template deleted.");
+    }
   }
 
   function renderNotesTemplateSelectOptions(selectedId = "") {
