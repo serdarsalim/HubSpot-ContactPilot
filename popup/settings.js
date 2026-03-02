@@ -47,6 +47,13 @@
     return getCloudConnectionCount() + cloudPendingRows.length < constants.MAX_CLOUD_ORG_CONNECTIONS;
   }
 
+  function canShowAddMoreButton() {
+    const connectedCount = getCloudConnectionCount();
+    if (connectedCount <= 0) return false;
+    if (cloudPendingRows.length > 0) return false;
+    return canAddMoreCloudRows();
+  }
+
   function createCloudPendingRow() {
     cloudPendingRowSeq += 1;
     return `pending_cloud_row_${Date.now()}_${cloudPendingRowSeq}`;
@@ -181,6 +188,7 @@
     if (dom.addCloudAuthBtn) {
       dom.addCloudAuthBtn.disabled = !canAddMoreCloudRows();
       dom.addCloudAuthBtn.textContent = canAddMoreCloudRows() ? "Add more" : "Max 5 org keys";
+      dom.addCloudAuthBtn.hidden = !canShowAddMoreButton();
     }
   }
 
@@ -948,6 +956,10 @@
   }
 
   function addCloudAuthRow() {
+    if (cloudPendingRows.length > 0) {
+      App.setStatus("Connect the current key first.");
+      return;
+    }
     if (!canAddMoreCloudRows()) {
       App.setStatus("You can connect up to 5 org keys.");
       return;
