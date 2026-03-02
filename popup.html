@@ -250,6 +250,16 @@
         margin: 0;
       }
 
+      .status-warning {
+        margin: 0;
+        color: #b42318;
+        font-weight: 600;
+      }
+
+      .status-warning[hidden] {
+        display: none;
+      }
+
       .status-actions {
         display: inline-flex;
         align-items: center;
@@ -1042,6 +1052,12 @@
         gap: 8px;
       }
 
+      .cloud-token-input-col {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
       .cloud-token-row .btn {
         white-space: nowrap;
       }
@@ -1112,6 +1128,15 @@
         margin: 0 0 10px;
         font-size: 13px;
         color: #39526c;
+      }
+
+      .settings-country-field input {
+        width: min(180px, 100%);
+      }
+
+      #cloudConnectionStatus {
+        margin: 0;
+        text-align: right;
       }
 
       .template-import-mode-row {
@@ -1621,6 +1646,10 @@
         background: #1a2a3f;
       }
 
+      body[data-theme="dark"] .status-warning {
+        color: #ff8a80;
+      }
+
       body[data-theme="dark"] .list,
       body[data-theme="dark"] .active-tab-card,
       body[data-theme="dark"] .settings-card,
@@ -1897,6 +1926,7 @@
 
         <div id="status" class="status">
           <span id="statusText" class="status-text">Loading contacts...</span>
+          <span id="statusWarning" class="status-warning" hidden></span>
           <span id="statusActions" class="status-actions" hidden>
             <button id="copyEmailBtn" class="status-action" type="button">Copy Email</button>
           </span>
@@ -2050,7 +2080,7 @@
           <h2>Settings</h2>
         </div>
 
-        <div class="field">
+        <div class="field settings-country-field">
           <label for="countryPrefixInput">Default country prefix (digits only)</label>
           <input id="countryPrefixInput" type="text" placeholder="60" />
         </div>
@@ -2063,11 +2093,13 @@
         <div class="field">
           <label for="cloudApiTokenInput">Cloud API token</label>
           <div class="cloud-token-row">
-            <input id="cloudApiTokenInput" type="password" placeholder="Paste API token" autocomplete="off" />
+            <div class="cloud-token-input-col">
+              <input id="cloudApiTokenInput" type="password" placeholder="Paste API token" autocomplete="off" />
+              <p id="cloudConnectionStatus" class="template-import-summary">Disconnected</p>
+            </div>
             <button id="saveCloudTokenBtn" class="btn" type="button">Save</button>
             <button id="refreshCloudTemplatesBtn" class="btn cloud-refresh-btn" type="button" aria-label="Refresh templates" title="Refresh templates"><span class="cloud-refresh-icon" aria-hidden="true">↻</span></button>
           </div>
-          <p id="cloudConnectionStatus" class="template-import-summary">Cloud templates: disconnected</p>
         </div>
 
         <div class="field">

@@ -7,6 +7,17 @@
     return columns.find((col) => /record\s*id/i.test(col.label) || RECORD_ID_COLUMN_PATTERN.test(col.id)) || null;
   }
 
+  function updateRecordIdColumnWarning(columns = state.currentColumns) {
+    if (typeof App.setStatusWarning !== "function") return;
+    const sourceColumns = Array.isArray(columns) ? columns : [];
+    if (!sourceColumns.length) {
+      App.setStatusWarning("");
+      return;
+    }
+    const hasRecordIdColumn = !!findRecordIdColumn(sourceColumns);
+    App.setStatusWarning(hasRecordIdColumn ? "" : "Record ID column missing. Required to match the correct contact.");
+  }
+
   function dedupeContactsByRecordId(contacts, columns) {
     const source = Array.isArray(contacts) ? contacts : [];
     if (!source.length) return [];
@@ -94,6 +105,7 @@
 
   function renderContacts() {
     dom.listEl.innerHTML = "";
+    updateRecordIdColumnWarning(state.currentColumns);
     const filteredContacts = App.getFilteredContacts();
     App.updateExportActionsVisibility();
 
@@ -383,6 +395,7 @@
       });
       const tab = resolved?.tab || null;
       if (!tab || typeof tab.id !== "number") {
+        App.setStatusWarning("");
         App.setStatus("Open a HubSpot contacts table tab (app.hubspot.com), refresh it, and try again.");
         return;
       }
@@ -400,6 +413,7 @@
         : resolved.probeResponse;
 
       if (!App.isValidContactsPayload(response)) {
+        App.setStatusWarning("");
         App.setStatus("Open a HubSpot contacts table tab (app.hubspot.com), refresh it, and try again.");
         return;
       }
@@ -428,6 +442,7 @@
         });
       }
     } catch (_error) {
+      App.setStatusWarning("");
       App.setStatus("Could not load contacts. Refresh HubSpot tab and retry.");
     } finally {
       state.contactsLoading = false;

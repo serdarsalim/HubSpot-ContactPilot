@@ -34,6 +34,7 @@
   const dom = {
     statusEl: document.getElementById("status"),
     statusTextEl: document.getElementById("statusText"),
+    statusWarningEl: document.getElementById("statusWarning"),
     statusActionsEl: document.getElementById("statusActions"),
     contactsSearchInput: document.getElementById("contactsSearchInput"),
     mainPageEl: document.getElementById("mainPage"),
@@ -507,6 +508,14 @@
     updateStickyHeadOffset();
   }
 
+  function setStatusWarning(message = "") {
+    if (!dom.statusWarningEl) return;
+    const text = String(message || "").trim();
+    dom.statusWarningEl.textContent = text;
+    dom.statusWarningEl.hidden = !text;
+    updateStickyHeadOffset();
+  }
+
   function showToast(message, durationMs = 2200) {
     if (!dom.appToastEl) {
       setStatus(message);
@@ -566,13 +575,45 @@
     return state.currentColumns.filter((col) => state.settings.visibleColumns[col.id] !== false);
   }
 
+  function isNameColumn(col) {
+    return /name/i.test(col?.label || "") || /^name(_\d+)?$/i.test(col?.id || "");
+  }
+
+  function isPossibilityColumn(col) {
+    return /(possibility|possiblity|probability)/i.test(col?.label || "") || /^(possibility|possiblity|probability)(_\d+)?$/i.test(col?.id || "");
+  }
+
+  function isPhoneColumn(col) {
+    if (!col) return false;
+    if (col.id === state.phoneColumnId) return true;
+    return /(phone(\s*number)?|mobile|whatsapp)/i.test(col.label || "") || /(phone(\s*number)?|mobile|whatsapp)/i.test(col.id || "");
+  }
+
+  function isNextActivityDateColumn(col) {
+    if (!col) return false;
+    return /next\s*activity\s*date/i.test(col.label || "") || /next[_\s]*activity[_\s]*date/i.test(col.id || "");
+  }
+
   function mergeColumnSettings() {
     let changed = false;
-    for (const col of state.currentColumns) {
-      if (typeof state.settings.visibleColumns[col.id] !== "boolean") {
-        state.settings.visibleColumns[col.id] = true;
-        changed = true;
+    const hasPossibilityColumn = state.currentColumns.some((col) => isPossibilityColumn(col));
+    const hasExplicitCurrentColumnSettings = state.currentColumns.some((col) => typeof state.settings.visibleColumns[col.id] === "boolean");
+
+    if (hasPossibilityColumn && !hasExplicitCurrentColumnSettings) {
+      for (const col of state.currentColumns) {
+        const shouldShow = isNameColumn(col) || isPossibilityColumn(col) || isPhoneColumn(col) || isNextActivityDateColumn(col);
+        if (state.settings.visibleColumns[col.id] !== shouldShow) {
+          state.settings.visibleColumns[col.id] = shouldShow;
+          changed = true;
+        }
       }
+      return changed;
+    }
+
+    for (const col of state.currentColumns) {
+      if (typeof state.settings.visibleColumns[col.id] === "boolean") continue;
+      state.settings.visibleColumns[col.id] = true;
+      changed = true;
     }
     return changed;
   }
@@ -920,6 +961,7 @@
     toggleTheme,
     updateStickyHeadOffset,
     setStatus,
+    setStatusWarning,
     showToast,
     setContactsLoadingState,
     contactKey,

@@ -67,13 +67,13 @@
 
     const auth = state.cloud.auth;
     if (!auth?.apiToken || !auth.organizationId) {
-      dom.cloudConnectionStatusEl.textContent = "Cloud templates: disconnected";
+      dom.cloudConnectionStatusEl.textContent = "Disconnected";
       return;
     }
 
     const orgName = auth.organizationName || auth.organizationSlug || auth.organizationId;
     const syncedAt = formatCloudSyncLabel(state.cloud.meta);
-    dom.cloudConnectionStatusEl.textContent = "Cloud templates: connected to " + orgName + " (last sync: " + syncedAt + ")";
+    dom.cloudConnectionStatusEl.textContent = "Connected to " + orgName + " (last sync: " + syncedAt + ")";
   }
 
   function rerenderTemplateViewsForCloudChange() {
@@ -678,7 +678,7 @@
         return { ok: false, error: reason };
       }
 
-      renderCloudConnectionStatus("Cloud templates: " + reason);
+      renderCloudConnectionStatus("Connection issue: " + reason);
       if (!silent) {
         App.setStatus("Cloud sync failed: " + reason);
       }
@@ -699,7 +699,7 @@
     }
 
     const previousAuth = state.cloud.auth;
-    renderCloudConnectionStatus("Cloud templates: validating token...");
+    renderCloudConnectionStatus("Validating token...");
     App.setStatus("Validating cloud API token...");
 
     try {
@@ -739,7 +739,7 @@
       const reason = rawReason.includes("404")
         ? rawReason + ". Ensure cloud backend is deployed."
         : rawReason;
-      renderCloudConnectionStatus(`Cloud templates: ${reason}`);
+      renderCloudConnectionStatus(reason);
       App.setStatus(`Cloud token failed: ${reason}`);
       if (typeof App.showToast === "function") {
         App.showToast(`Token failed: ${reason}`, 3200);
