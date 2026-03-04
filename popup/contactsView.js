@@ -182,8 +182,10 @@
                   </button>`
                 : "";
 
-              const phoneContent = contact.waUrl
-                ? `<a class='row-wa-link phone-value' href='${App.escapeHtml(contact.waUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a>`
+              const phoneContent = phoneText
+                ? `<button type='button' class='row-wa-link phone-value row-phone-wa-link' data-key='${App.escapeHtml(key)}' title='Open WhatsApp'>${App.escapeHtml(
+                    value
+                  )}</button>`
                 : `<span class='phone-value'>${App.escapeHtml(value)}</span>`;
 
               return `<td class='${css}'><span class='phone-cell-wrap'>${phoneContent}${copyButton}</span></td>`;
@@ -326,6 +328,16 @@
         App.trackEvent("whatsapp_clicked", {
           selected_count: state.selectedKeys.size
         });
+      });
+    });
+
+    dom.listEl.querySelectorAll(".row-phone-wa-link").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const key = button.getAttribute("data-key");
+        if (!key) return;
+        const contact = displayedByKey.get(key);
+        if (!contact) return;
+        await App.openDirectWhatsappForContact(contact);
       });
     });
 

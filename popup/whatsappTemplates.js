@@ -377,22 +377,25 @@
       return currentPrefix;
     }
 
-    const entered = window.prompt(
-      "This number looks local and has no country code. Enter a default country code (numbers only, e.g. 90). You can change this later in Settings.",
-      currentPrefix
-    );
-    if (entered === null) {
+    const selectedPrefix = await App.openCountryPrefixPromptDialog({
+      initialCode: currentPrefix,
+      message: "This phone number looks local and has no country code. Choose a default country code to continue."
+    });
+    if (selectedPrefix === null) {
       App.setStatus("WhatsApp canceled. No default country code was set.");
       return null;
     }
 
-    const nextPrefix = String(entered || "").replace(/\D/g, "");
+    const nextPrefix = String(selectedPrefix || "").replace(/\D/g, "");
     if (!nextPrefix) {
-      App.setStatus("Please enter a numeric country code. You can also set it from Settings.");
+      App.setStatus("Please select a country code. You can also set it from Settings.");
       return null;
     }
 
     state.settings = { ...state.settings, countryPrefix: nextPrefix };
+    if (typeof App.ensureCountryPrefixOptionExists === "function") {
+      App.ensureCountryPrefixOptionExists(nextPrefix);
+    }
     if (dom.countryPrefixInput) dom.countryPrefixInput.value = nextPrefix;
 
     try {
@@ -432,10 +435,34 @@
     const phoneDigits = getPhoneDigitsForContact(contact, countryPrefixInput);
     if (!phoneDigits) return "";
 
-    const tokens = App.getContactTokenMap(contact);
-    const text = App.applyTokens(template.body, tokens).trim();
+    let text = "";
+    if (template) {
+      const tokens = App.getContactTokenMap(contact);
+      text = App.applyTokens(template.body, tokens).trim();
+    }
     const baseUrl = `https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number`;
     return text ? `${baseUrl}&text=${encodeURIComponent(text)}` : baseUrl;
+  }
+
+  async function openDirectWhatsappForContact(contact) {
+    if (!contact) return false;
+    const countryPrefix = await ensureCountryPrefixForContact(contact);
+    if (countryPrefix === null) return false;
+
+    const waUrl = buildWhatsappUrl(contact, null, countryPrefix || state.settings.countryPrefix);
+    if (!waUrl) {
+      App.setStatus("Could not build WhatsApp link. Missing phone number.");
+      return false;
+    }
+
+    try {
+      await chrome.tabs.create({ url: waUrl, active: true });
+      App.setStatus(`Opened WhatsApp for ${App.getContactDisplayName(contact)}.`);
+      return true;
+    } catch (_error) {
+      App.setStatus("Could not open WhatsApp link.");
+      return false;
+    }
   }
 
   async function applyWhatsappTemplateToContact(contact, key, template) {
@@ -488,6 +515,7 @@
     renderWhatsappTemplatePickerOptions,
     openWhatsappTemplatePicker,
     closeWhatsappTemplatePicker,
-    applyWhatsappTemplateToContact
+    applyWhatsappTemplateToContact,
+    openDirectWhatsappForContact
   });
 })();

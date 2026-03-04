@@ -159,6 +159,15 @@
         const context = getActiveContactContext();
         if (!context) return;
         App.openWhatsappTemplatePicker(context.contact, activeTabKey(context));
+        return;
+      }
+
+      const phoneWhatsappTrigger = target.closest("[data-active-tab-open-whatsapp]");
+      if (phoneWhatsappTrigger) {
+        event.preventDefault();
+        const context = getActiveContactContext();
+        if (!context) return;
+        void App.openDirectWhatsappForContact(context.contact);
       }
     });
   }
@@ -175,17 +184,17 @@
     const latestTask = String(context?.latestTask || context?.recentTasks?.[0] || "").trim();
     const phoneRawValue = contact ? String(contact.values?.[state.phoneColumnId || "phone"] || contact.values?.phone || "") : "";
     const phoneValue = normalizePhoneDisplay(phoneRawValue);
-    const blankWhatsappUrl = buildBlankWhatsappUrl(contact, phoneRawValue);
+    const hasPhoneValue = !!phoneValue && phoneValue !== "-";
 
     if (dom.activeTabPhoneEl) {
       if (kind === "contact" && contact) {
         dom.activeTabPhoneEl.innerHTML = `
           <span class="active-tab-phone-wrap">
             ${
-              blankWhatsappUrl && phoneValue
-                ? `<a href="${App.escapeHtml(blankWhatsappUrl)}" target="_blank" rel="noopener noreferrer" class="active-tab-phone-link" title="Open WhatsApp">${App.escapeHtml(
+              hasPhoneValue
+                ? `<button type="button" class="active-tab-inline-link active-tab-phone-link" data-active-tab-open-whatsapp="1" title="Open WhatsApp">${App.escapeHtml(
                     phoneValue
-                  )}</a>`
+                  )}</button>`
                 : `<span>${App.escapeHtml(phoneValue || "-")}</span>`
             }
             <button type="button" class="active-tab-whatsapp-link" data-active-tab-whatsapp-template="1" aria-label="WhatsApp templates" title="WhatsApp templates">

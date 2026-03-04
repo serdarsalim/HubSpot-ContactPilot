@@ -92,6 +92,11 @@
       if (event.target === dom.recordIdRequiredOverlay) App.closeRecordIdRequiredDialog();
     });
   }
+  if (dom.countryPrefixPromptOverlay) {
+    dom.countryPrefixPromptOverlay.addEventListener("click", (event) => {
+      if (event.target === dom.countryPrefixPromptOverlay) App.closeCountryPrefixPromptDialog(null);
+    });
+  }
 
   if (dom.templateImportOverlay) {
     dom.templateImportOverlay.addEventListener("click", (event) => {
@@ -107,6 +112,8 @@
   if (dom.cancelEmailTemplatePickBtn) dom.cancelEmailTemplatePickBtn.addEventListener("click", App.closeEmailTemplatePicker);
   if (dom.cancelWhatsappTemplatePickBtn) dom.cancelWhatsappTemplatePickBtn.addEventListener("click", App.closeWhatsappTemplatePicker);
   if (dom.recordIdRequiredCloseBtn) dom.recordIdRequiredCloseBtn.addEventListener("click", App.closeRecordIdRequiredDialog);
+  if (dom.countryPrefixPromptCancelBtn) dom.countryPrefixPromptCancelBtn.addEventListener("click", () => App.closeCountryPrefixPromptDialog(null));
+  if (dom.countryPrefixPromptSaveBtn) dom.countryPrefixPromptSaveBtn.addEventListener("click", App.submitCountryPrefixPromptDialog);
   if (dom.emailTemplatePickSearchInput) {
     dom.emailTemplatePickSearchInput.addEventListener("input", (event) => {
       const target = event.target;

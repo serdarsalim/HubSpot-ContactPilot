@@ -87,6 +87,16 @@
     cancelWhatsappTemplatePickBtn: document.getElementById("cancelWhatsappTemplatePickBtn"),
     recordIdRequiredMessageEl: document.getElementById("recordIdRequiredMessage"),
     recordIdRequiredCloseBtn: document.getElementById("recordIdRequiredCloseBtn"),
+    countryPrefixPromptOverlay: document.getElementById("countryPrefixPromptOverlay"),
+    countryPrefixPromptMessageEl: document.getElementById("countryPrefixPromptMessage"),
+    countryPrefixPromptSelect: document.getElementById("countryPrefixPromptSelect"),
+    countryPrefixPromptDropdown: document.getElementById("countryPrefixPromptDropdown"),
+    countryPrefixPromptDropdownBtn: document.getElementById("countryPrefixPromptDropdownBtn"),
+    countryPrefixPromptDropdownPanel: document.getElementById("countryPrefixPromptDropdownPanel"),
+    countryPrefixPromptDropdownSearch: document.getElementById("countryPrefixPromptDropdownSearch"),
+    countryPrefixPromptDropdownList: document.getElementById("countryPrefixPromptDropdownList"),
+    countryPrefixPromptCancelBtn: document.getElementById("countryPrefixPromptCancelBtn"),
+    countryPrefixPromptSaveBtn: document.getElementById("countryPrefixPromptSaveBtn"),
 
     refreshBtn: document.getElementById("refreshBtn"),
     csvSelectedBtn: document.getElementById("csvSelectedBtn"),
@@ -102,6 +112,11 @@
     activeTabLatestTaskEl: document.getElementById("activeTabLatestTask"),
 
     countryPrefixInput: document.getElementById("countryPrefixInput"),
+    countryPrefixDropdown: document.getElementById("countryPrefixDropdown"),
+    countryPrefixDropdownBtn: document.getElementById("countryPrefixDropdownBtn"),
+    countryPrefixDropdownPanel: document.getElementById("countryPrefixDropdownPanel"),
+    countryPrefixDropdownSearch: document.getElementById("countryPrefixDropdownSearch"),
+    countryPrefixDropdownList: document.getElementById("countryPrefixDropdownList"),
     messageTemplateInput: document.getElementById("messageTemplateInput"),
     noteTemplateInput: document.getElementById("noteTemplateInput"),
     rowFilterInput: document.getElementById("rowFilterInput"),
@@ -140,6 +155,8 @@
     appToastEl: document.getElementById("appToast")
   };
   let toastTimerId = null;
+  let countryPrefixPromptResolver = null;
+  let countryPrefixPromptDropdownBound = false;
 
   const SETTINGS_KEY = "popupSettings";
   const EMAIL_TEMPLATES_LOCAL_KEY = "popupEmailTemplates";
@@ -918,6 +935,200 @@
     }
   }
 
+  function resolveCountryPrefixPrompt(value = null) {
+    if (typeof countryPrefixPromptResolver !== "function") return;
+    const resolver = countryPrefixPromptResolver;
+    countryPrefixPromptResolver = null;
+    resolver(value);
+  }
+
+  function closeCountryPrefixPromptDropdown() {
+    if (!dom.countryPrefixPromptDropdown) return;
+    dom.countryPrefixPromptDropdown.classList.remove("open");
+  }
+
+  function updateCountryPrefixPromptDropdownButton() {
+    if (!dom.countryPrefixPromptDropdownBtn || !dom.countryPrefixPromptSelect) return;
+    const selectedOption = dom.countryPrefixPromptSelect.options[dom.countryPrefixPromptSelect.selectedIndex] || null;
+    const label = String(selectedOption?.textContent || "").trim();
+    dom.countryPrefixPromptDropdownBtn.textContent = label || "Select country code";
+  }
+
+  function renderCountryPrefixPromptDropdownList() {
+    if (!dom.countryPrefixPromptDropdownList || !dom.countryPrefixPromptSelect) return;
+    const query = String(dom.countryPrefixPromptDropdownSearch?.value || "")
+      .trim()
+      .toLowerCase();
+    const selectedCode = String(dom.countryPrefixPromptSelect.value || "").replace(/\D/g, "");
+
+    const options = Array.from(dom.countryPrefixPromptSelect.options || []).filter((option) => {
+      const code = String(option?.value || "").replace(/\D/g, "");
+      return !!code;
+    });
+
+    const filtered = query
+      ? options.filter((option) => {
+          const code = String(option?.value || "").replace(/\D/g, "");
+          const label = String(option?.textContent || "").toLowerCase();
+          return label.includes(query) || code.includes(query);
+        })
+      : options;
+
+    if (!filtered.length) {
+      dom.countryPrefixPromptDropdownList.innerHTML = "<div class='email-template-empty'>No countries found.</div>";
+      return;
+    }
+
+    dom.countryPrefixPromptDropdownList.innerHTML = filtered
+      .map((option) => {
+        const code = String(option?.value || "").replace(/\D/g, "");
+        const label = String(option?.textContent || "").trim() || `+${code}`;
+        const selectedClass = code === selectedCode ? "is-selected" : "";
+        return `<button type='button' class='country-prefix-dropdown-item ${selectedClass}' data-country-code='${escapeHtml(code)}'>${escapeHtml(
+          label
+        )}</button>`;
+      })
+      .join("");
+  }
+
+  function openCountryPrefixPromptDropdown() {
+    if (!dom.countryPrefixPromptDropdown) return;
+    dom.countryPrefixPromptDropdown.classList.add("open");
+    if (dom.countryPrefixPromptDropdownSearch) {
+      dom.countryPrefixPromptDropdownSearch.value = "";
+      renderCountryPrefixPromptDropdownList();
+      dom.countryPrefixPromptDropdownSearch.focus();
+      return;
+    }
+    renderCountryPrefixPromptDropdownList();
+  }
+
+  function bindCountryPrefixPromptDropdown() {
+    if (countryPrefixPromptDropdownBound) return;
+    if (!dom.countryPrefixPromptDropdown || !dom.countryPrefixPromptDropdownBtn || !dom.countryPrefixPromptDropdownList) return;
+    countryPrefixPromptDropdownBound = true;
+
+    dom.countryPrefixPromptDropdownBtn.addEventListener("click", () => {
+      const isOpen = dom.countryPrefixPromptDropdown?.classList.contains("open");
+      if (isOpen) closeCountryPrefixPromptDropdown();
+      else openCountryPrefixPromptDropdown();
+    });
+
+    if (dom.countryPrefixPromptDropdownSearch) {
+      dom.countryPrefixPromptDropdownSearch.addEventListener("input", () => {
+        renderCountryPrefixPromptDropdownList();
+      });
+      dom.countryPrefixPromptDropdownSearch.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const first = dom.countryPrefixPromptDropdownList?.querySelector("[data-country-code]");
+          if (first instanceof HTMLElement) first.click();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          closeCountryPrefixPromptDropdown();
+        }
+      });
+    }
+
+    dom.countryPrefixPromptDropdownList.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const option = target.closest("[data-country-code]");
+      if (!(option instanceof HTMLElement)) return;
+      const code = String(option.getAttribute("data-country-code") || "").replace(/\D/g, "");
+      if (!code || !dom.countryPrefixPromptSelect) return;
+      dom.countryPrefixPromptSelect.value = code;
+      updateCountryPrefixPromptDropdownButton();
+      closeCountryPrefixPromptDropdown();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!dom.countryPrefixPromptDropdown) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (dom.countryPrefixPromptDropdown.contains(target)) return;
+      closeCountryPrefixPromptDropdown();
+    });
+  }
+
+  function openCountryPrefixPromptDialog(options = {}) {
+    if (!dom.countryPrefixPromptOverlay || !dom.countryPrefixPromptSelect) {
+      return Promise.resolve(null);
+    }
+
+    resolveCountryPrefixPrompt(null);
+
+    const initialCode = String(options.initialCode || state.settings.countryPrefix || "").replace(/\D/g, "");
+    const promptMessage =
+      String(options.message || "").trim() ||
+      "This phone number appears to be local. Choose a default country code to continue. You can change this later in Settings.";
+
+    if (typeof App.renderCountryPrefixOptions === "function") {
+      App.renderCountryPrefixOptions(initialCode);
+    }
+
+    const select = dom.countryPrefixPromptSelect;
+    select.textContent = "";
+    const placeholderOption = document.createElement("option");
+    placeholderOption.value = "";
+    placeholderOption.textContent = "Select country code";
+    select.append(placeholderOption);
+
+    const sourceOptions = Array.from(dom.countryPrefixInput?.options || []);
+    for (const option of sourceOptions) {
+      const code = String(option?.value || "").replace(/\D/g, "");
+      if (!code) continue;
+      const nextOption = document.createElement("option");
+      nextOption.value = code;
+      nextOption.textContent = String(option.textContent || `+${code}`);
+      select.append(nextOption);
+    }
+
+    if (dom.countryPrefixPromptMessageEl) {
+      dom.countryPrefixPromptMessageEl.textContent = promptMessage;
+    }
+    select.value = initialCode;
+    if (select.value !== initialCode) {
+      select.value = "";
+    }
+
+    bindCountryPrefixPromptDropdown();
+    updateCountryPrefixPromptDropdownButton();
+    renderCountryPrefixPromptDropdownList();
+    closeCountryPrefixPromptDropdown();
+
+    dom.countryPrefixPromptOverlay.classList.add("open");
+    setTimeout(() => {
+      dom.countryPrefixPromptDropdownBtn?.focus();
+    }, 0);
+
+    return new Promise((resolve) => {
+      countryPrefixPromptResolver = resolve;
+    });
+  }
+
+  function closeCountryPrefixPromptDialog(value = null) {
+    resolveCountryPrefixPrompt(value);
+    closeCountryPrefixPromptDropdown();
+    if (dom.countryPrefixPromptOverlay) {
+      blurFocusedElementWithin(dom.countryPrefixPromptOverlay);
+      preserveScrollPosition(() => {
+        dom.countryPrefixPromptOverlay.classList.remove("open");
+      });
+    }
+  }
+
+  function submitCountryPrefixPromptDialog() {
+    const nextPrefix = String(dom.countryPrefixPromptSelect?.value || "").replace(/\D/g, "");
+    if (!nextPrefix) {
+      setStatus("Please select a country code to continue. You can also set it in Settings.");
+      if (typeof showToast === "function") showToast("Select a country code.");
+      openCountryPrefixPromptDropdown();
+      return;
+    }
+    closeCountryPrefixPromptDialog(nextPrefix);
+  }
+
   App.dom = dom;
   App.constants = {
     SETTINGS_KEY,
@@ -1007,6 +1218,9 @@
     blurFocusedElementWithin,
     preserveScrollPosition,
     openRecordIdRequiredDialog,
-    closeRecordIdRequiredDialog
+    closeRecordIdRequiredDialog,
+    openCountryPrefixPromptDialog,
+    closeCountryPrefixPromptDialog,
+    submitCountryPrefixPromptDialog
   });
 })();
