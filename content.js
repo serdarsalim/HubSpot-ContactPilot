@@ -2132,17 +2132,20 @@
 
   function buildInlineTemplateTokens(context) {
     const values = context?.contact?.values || {};
-    const name = cleanText(values.name || "");
-    const firstName = name ? name.split(" ")[0] : "";
+    const fullName = cleanText(values.name || "");
+    const firstName = fullName ? fullName.split(" ")[0] : "";
+    const resolvedName = firstName || fullName;
     const owner = cleanText(values.owner || context?.owner || "");
     const email = cleanText(values.email || "");
     const phone = cleanText(values.phone || "");
     const recordId = cleanText(context?.recordId || values.record_id || "");
 
     const tokens = {
-      name,
-      first_name: firstName,
-      firstname: firstName,
+      name: resolvedName,
+      first_name: resolvedName,
+      firstname: resolvedName,
+      full_name: fullName,
+      fullname: fullName,
       owner,
       email,
       phone,
@@ -2153,6 +2156,7 @@
     for (const [rawKey, rawValue] of Object.entries(values)) {
       const key = inlineTokenKey(rawKey);
       if (!key) continue;
+      if (Object.prototype.hasOwnProperty.call(tokens, key)) continue;
       tokens[key] = cleanText(rawValue || "");
     }
 
