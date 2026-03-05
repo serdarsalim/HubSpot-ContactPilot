@@ -776,6 +776,9 @@
       rowFilterWord: String(dom.rowFilterInput?.value || "")
         .replace(/\s+/g, " ")
         .trim(),
+      inlineQuickActionsEnabled: dom.inlineQuickActionsEnabledInput
+        ? dom.inlineQuickActionsEnabledInput.checked
+        : true,
       visibleColumns
     };
   }
@@ -785,6 +788,9 @@
     if (dom.messageTemplateInput) dom.messageTemplateInput.value = "";
     if (dom.noteTemplateInput) dom.noteTemplateInput.value = "";
     if (dom.rowFilterInput) dom.rowFilterInput.value = state.settings.rowFilterWord || "";
+    if (dom.inlineQuickActionsEnabledInput) {
+      dom.inlineQuickActionsEnabledInput.checked = state.settings.inlineQuickActionsEnabled !== false;
+    }
     renderCloudAuthCards();
     renderCloudConnectionStatus();
     renderColumnChecks();
@@ -1812,6 +1818,7 @@
       whatsappTemplates,
       noteTemplates
     };
+    state.settings.inlineQuickActionsEnabled = state.settings.inlineQuickActionsEnabled !== false;
     const migratedList = normalizeCloudAuthList(savedCloudAuthList);
     const legacyAuth = App.normalizeCloudAuth(savedCloudAuth);
     state.cloud.authList = migratedList.length ? migratedList : legacyAuth ? [legacyAuth] : [];

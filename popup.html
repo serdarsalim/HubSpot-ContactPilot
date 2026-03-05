@@ -1055,6 +1055,24 @@
         margin-bottom: 6px;
       }
 
+      .setting-toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        padding: 9px 10px;
+        font-size: 13px;
+        color: var(--text);
+      }
+
+      .setting-toggle-row input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+      }
+
       .field input[type="text"],
       .field input[type="password"] {
         width: 100%;
@@ -2067,6 +2085,12 @@
         color: #9fb5cd;
       }
 
+      body[data-theme="dark"] .setting-toggle-row {
+        background: #1a2a3e;
+        border-color: #456181;
+        color: #d8e6f8;
+      }
+
       body[data-theme="dark"] .contacts-bottom-spacer {
         background: linear-gradient(180deg, #132033 0%, #0f1724 100%);
       }
@@ -2335,6 +2359,13 @@
         <div class="field">
           <label for="rowFilterInput">Filter out rows containing these words (comma-separated)</label>
           <input id="rowFilterInput" type="text" placeholder="preview, blacklist" />
+        </div>
+        <div class="field">
+          <label for="inlineQuickActionsEnabledInput">HubSpot contact page widget</label>
+          <label class="setting-toggle-row">
+            <input id="inlineQuickActionsEnabledInput" type="checkbox" />
+            Enable in-page quick actions (email, note, WhatsApp)
+          </label>
         </div>
         <div class="field">
           <div class="cloud-token-label-row">

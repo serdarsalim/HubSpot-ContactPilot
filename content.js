@@ -28,6 +28,7 @@
   const NOTE_TEMPLATES_LOCAL_KEY = "popupNoteTemplates";
   const INLINE_QUICK_ACTIONS_ROOT_ID = "cpInlineQuickActionsRoot";
   const INLINE_QUICK_ACTIONS_STYLE_ID = "cpInlineQuickActionsStyle";
+  const INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY = "popupInlineQuickActionsPosition";
   const INLINE_QUICK_ACTIONS_CHECK_INTERVAL_MS = 900;
   const DARK_READER_THEME = Object.freeze({
     brightness: 100,
@@ -69,6 +70,7 @@
         if (chrome.runtime.lastError) return;
         const settings = result?.[SETTINGS_KEY];
         applyHubSpotThemeMode(settings?.themeMode || "light");
+        applyInlineQuickActionsSettings(settings);
       });
     } catch (_error) {
       // Ignore storage read failures.
@@ -78,10 +80,19 @@
   function subscribeHubSpotThemeChanges() {
     try {
       chrome.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName !== "sync") return;
-        if (!changes || !Object.prototype.hasOwnProperty.call(changes, SETTINGS_KEY)) return;
-        const nextSettings = changes[SETTINGS_KEY]?.newValue;
-        applyHubSpotThemeMode(nextSettings?.themeMode || "light");
+        if (!changes) return;
+
+        if (areaName === "sync" && Object.prototype.hasOwnProperty.call(changes, SETTINGS_KEY)) {
+          const nextSettings = changes[SETTINGS_KEY]?.newValue;
+          applyHubSpotThemeMode(nextSettings?.themeMode || "light");
+          applyInlineQuickActionsSettings(nextSettings);
+        }
+
+        if (areaName === "local" && Object.prototype.hasOwnProperty.call(changes, INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY)) {
+          const nextPosition = normalizeInlineQuickActionsPosition(changes[INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY]?.newValue);
+          inlineQuickActionsState.position = nextPosition;
+          applyInlineQuickActionsPosition();
+        }
       });
     } catch (_error) {
       // Ignore storage subscription failures.
@@ -1651,11 +1662,46 @@
       note: [],
       whatsapp: []
     },
+    enabled: true,
     countryPrefix: DEFAULT_COUNTRY_CODE,
+    position: null,
     busy: false,
     lastUrl: "",
-    watcherTimerId: 0
+    watcherTimerId: 0,
+    dragging: {
+      active: false,
+      pointerId: null,
+      offsetX: 0,
+      offsetY: 0
+    }
   };
+
+  function normalizeInlineQuickActionsEnabled(value) {
+    return value !== false;
+  }
+
+  function applyInlineQuickActionsSettings(settings, options = {}) {
+    const source = settings && typeof settings === "object" ? settings : null;
+    if (source) {
+      if (Object.prototype.hasOwnProperty.call(source, "countryPrefix")) {
+        inlineQuickActionsState.countryPrefix = String(source.countryPrefix || DEFAULT_COUNTRY_CODE);
+      }
+      if (Object.prototype.hasOwnProperty.call(source, "inlineQuickActionsEnabled")) {
+        inlineQuickActionsState.enabled = normalizeInlineQuickActionsEnabled(source.inlineQuickActionsEnabled);
+      }
+    }
+    if (options.sync !== false) {
+      syncInlineQuickActionsForCurrentRoute(true);
+    }
+  }
+
+  function normalizeInlineQuickActionsPosition(rawPosition) {
+    if (!rawPosition || typeof rawPosition !== "object") return null;
+    const left = Number(rawPosition.left);
+    const top = Number(rawPosition.top);
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+    return { left: Math.round(left), top: Math.round(top) };
+  }
 
   function readStorageArea(areaName, keys) {
     return new Promise((resolve) => {
@@ -1676,6 +1722,58 @@
         resolve({});
       }
     });
+  }
+
+  async function loadInlineQuickActionsPosition() {
+    const local = await readStorageArea("local", [INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY]);
+    inlineQuickActionsState.position = normalizeInlineQuickActionsPosition(local?.[INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY]);
+  }
+
+  function persistInlineQuickActionsPosition() {
+    if (!inlineQuickActionsState.position) return;
+    try {
+      chrome.storage.local.set({
+        [INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY]: {
+          left: inlineQuickActionsState.position.left,
+          top: inlineQuickActionsState.position.top
+        }
+      });
+    } catch (_error) {
+      // Ignore storage write failures.
+    }
+  }
+
+  function clampInlineQuickActionsPosition(position, width, height) {
+    const margin = 8;
+    const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - height - margin);
+    return {
+      left: Math.min(maxLeft, Math.max(margin, Math.round(position.left))),
+      top: Math.min(maxTop, Math.max(margin, Math.round(position.top)))
+    };
+  }
+
+  function applyInlineQuickActionsPosition() {
+    const rootEl = inlineQuickActionsState.rootEl;
+    if (!rootEl) return;
+
+    if (!inlineQuickActionsState.position) {
+      rootEl.style.left = "";
+      rootEl.style.top = "";
+      rootEl.style.right = "14px";
+      rootEl.style.bottom = "14px";
+      return;
+    }
+
+    const rect = rootEl.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    const next = clampInlineQuickActionsPosition(inlineQuickActionsState.position, width, height);
+    inlineQuickActionsState.position = next;
+    rootEl.style.left = `${next.left}px`;
+    rootEl.style.top = `${next.top}px`;
+    rootEl.style.right = "auto";
+    rootEl.style.bottom = "auto";
   }
 
   function inlineTokenKey(input) {
@@ -1776,7 +1874,7 @@
     inlineQuickActionsState.templates.email = normalizeInlineEmailTemplates(local?.[EMAIL_TEMPLATES_LOCAL_KEY]);
     inlineQuickActionsState.templates.note = normalizeInlineNoteTemplates(local?.[NOTE_TEMPLATES_LOCAL_KEY]);
     inlineQuickActionsState.templates.whatsapp = normalizeInlineWhatsappTemplates(local?.[WHATSAPP_TEMPLATES_LOCAL_KEY]);
-    inlineQuickActionsState.countryPrefix = String(sync?.[SETTINGS_KEY]?.countryPrefix || DEFAULT_COUNTRY_CODE);
+    applyInlineQuickActionsSettings(sync?.[SETTINGS_KEY], { sync: false });
   }
 
   function ensureInlineQuickActionsStyles() {
@@ -1803,17 +1901,37 @@
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        padding: 8px 10px 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        padding: 9px 10px 5px;
+        cursor: grab;
+        user-select: none;
+        color: #173656;
+        background: linear-gradient(180deg, #eef6ff 0%, #f7fbff 100%);
+        border-bottom: 1px solid #d8e4f2;
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-brand-name {
+        line-height: 1;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-head {
+        cursor: grabbing;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
-        padding: 0 10px 8px;
+        padding: 0 10px 9px;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-divider {
@@ -1903,6 +2021,48 @@
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-status[data-tone="success"] {
         color: #19733d;
       }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-card {
+        background: #2a425b !important;
+        border-color: #7f9bb8 !important;
+        color: #e7f0fb !important;
+        box-shadow: 0 8px 24px rgba(4, 14, 28, 0.42) !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
+        color: #f0f6ff !important;
+        background: linear-gradient(180deg, #3a5674 0%, #2f4966 100%) !important;
+        border-bottom-color: #6f8aa8 !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-divider {
+        color: #c3d6eb !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-action-btn {
+        color: #e3eefb !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-action-btn:hover {
+        background: rgba(173, 205, 238, 0.2) !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-action-btn.active {
+        background: rgba(173, 205, 238, 0.26) !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-panel {
+        border-top-color: #6f8aa8 !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn:hover {
+        background: rgba(173, 205, 238, 0.18) !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-empty,
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-status {
+        color: #d2e2f3 !important;
+      }
     `;
     document.documentElement.appendChild(styleEl);
   }
@@ -1927,6 +2087,10 @@
     inlineQuickActionsState.busy = !!busy;
     if (!inlineQuickActionsState.rootEl) return;
     inlineQuickActionsState.rootEl.dataset.busy = busy ? "1" : "0";
+    renderInlineQuickActionButtons();
+    inlineQuickActionsState.rootEl.querySelectorAll(".cp-inline-template-btn").forEach((button) => {
+      button.disabled = inlineQuickActionsState.busy;
+    });
   }
 
   function renderInlineQuickActionButtons() {
@@ -2077,6 +2241,68 @@
     }
   }
 
+  function finishInlineQuickActionsDrag() {
+    if (!inlineQuickActionsState.dragging.active) return;
+    inlineQuickActionsState.dragging.active = false;
+    inlineQuickActionsState.dragging.pointerId = null;
+    if (inlineQuickActionsState.rootEl) {
+      inlineQuickActionsState.rootEl.dataset.dragging = "0";
+    }
+    document.removeEventListener("pointermove", handleInlineQuickActionsPointerMove, true);
+    document.removeEventListener("pointerup", handleInlineQuickActionsPointerUp, true);
+    document.removeEventListener("pointercancel", handleInlineQuickActionsPointerUp, true);
+    persistInlineQuickActionsPosition();
+  }
+
+  function handleInlineQuickActionsPointerMove(event) {
+    if (!inlineQuickActionsState.dragging.active || !inlineQuickActionsState.rootEl) return;
+    if (inlineQuickActionsState.dragging.pointerId !== null && event.pointerId !== inlineQuickActionsState.dragging.pointerId) return;
+
+    const rootEl = inlineQuickActionsState.rootEl;
+    const rect = rootEl.getBoundingClientRect();
+    const next = clampInlineQuickActionsPosition(
+      {
+        left: event.clientX - inlineQuickActionsState.dragging.offsetX,
+        top: event.clientY - inlineQuickActionsState.dragging.offsetY
+      },
+      Math.max(1, Math.round(rect.width)),
+      Math.max(1, Math.round(rect.height))
+    );
+
+    inlineQuickActionsState.position = next;
+    rootEl.style.left = `${next.left}px`;
+    rootEl.style.top = `${next.top}px`;
+    rootEl.style.right = "auto";
+    rootEl.style.bottom = "auto";
+    event.preventDefault();
+  }
+
+  function handleInlineQuickActionsPointerUp(event) {
+    if (inlineQuickActionsState.dragging.pointerId !== null && event.pointerId !== inlineQuickActionsState.dragging.pointerId) return;
+    finishInlineQuickActionsDrag();
+  }
+
+  function handleInlineQuickActionsPointerDown(event) {
+    if (inlineQuickActionsState.busy) return;
+    if (event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const handle = target.closest(".cp-inline-head");
+    if (!handle || !inlineQuickActionsState.rootEl) return;
+
+    const rect = inlineQuickActionsState.rootEl.getBoundingClientRect();
+    inlineQuickActionsState.dragging.active = true;
+    inlineQuickActionsState.dragging.pointerId = event.pointerId;
+    inlineQuickActionsState.dragging.offsetX = event.clientX - rect.left;
+    inlineQuickActionsState.dragging.offsetY = event.clientY - rect.top;
+    inlineQuickActionsState.rootEl.dataset.dragging = "1";
+
+    document.addEventListener("pointermove", handleInlineQuickActionsPointerMove, true);
+    document.addEventListener("pointerup", handleInlineQuickActionsPointerUp, true);
+    document.addEventListener("pointercancel", handleInlineQuickActionsPointerUp, true);
+    event.preventDefault();
+  }
+
   function closeInlinePanelWhenClickingOutside(event) {
     if (!inlineQuickActionsState.rootEl) return;
     if (!inlineQuickActionsState.activeKind) return;
@@ -2093,9 +2319,10 @@
     const rootEl = document.createElement("div");
     rootEl.id = INLINE_QUICK_ACTIONS_ROOT_ID;
     rootEl.dataset.busy = "0";
+    rootEl.dataset.dragging = "0";
     rootEl.innerHTML = `
       <div class='cp-inline-card'>
-        <div class='cp-inline-head'>contact point.</div>
+        <div class='cp-inline-head'><span class='cp-inline-brand-name'>Contact Point</span></div>
         <div class='cp-inline-actions-row'>
           <button type='button' class='cp-inline-action-btn' data-kind='email' aria-label='Email templates' title='Email templates'>${inlineActionIcon("email")}</button>
           <span class='cp-inline-divider'>|</span>
@@ -2109,16 +2336,20 @@
     `;
 
     rootEl.addEventListener("click", handleInlineRootClick);
+    rootEl.addEventListener("pointerdown", handleInlineQuickActionsPointerDown);
     document.body.appendChild(rootEl);
     inlineQuickActionsState.rootEl = rootEl;
     inlineQuickActionsState.panelEl = rootEl.querySelector(".cp-inline-panel");
     inlineQuickActionsState.statusEl = rootEl.querySelector(".cp-inline-status");
+    applyInlineQuickActionsPosition();
     renderInlineQuickActionButtons();
   }
 
   function unmountInlineQuickActions() {
     if (!inlineQuickActionsState.rootEl) return;
+    finishInlineQuickActionsDrag();
     inlineQuickActionsState.rootEl.removeEventListener("click", handleInlineRootClick);
+    inlineQuickActionsState.rootEl.removeEventListener("pointerdown", handleInlineQuickActionsPointerDown);
     inlineQuickActionsState.rootEl.remove();
     inlineQuickActionsState.rootEl = null;
     inlineQuickActionsState.panelEl = null;
@@ -2127,12 +2358,12 @@
     inlineQuickActionsState.busy = false;
   }
 
-  function syncInlineQuickActionsForCurrentRoute() {
+  function syncInlineQuickActionsForCurrentRoute(force = false) {
     const href = String(location.href || "");
-    if (href === inlineQuickActionsState.lastUrl) return;
+    if (!force && href === inlineQuickActionsState.lastUrl) return;
     inlineQuickActionsState.lastUrl = href;
 
-    if (!isInlineQuickActionsEligiblePage()) {
+    if (!inlineQuickActionsState.enabled || !isInlineQuickActionsEligiblePage()) {
       unmountInlineQuickActions();
       return;
     }
@@ -2142,15 +2373,22 @@
     void refreshInlineQuickActionsData();
   }
 
+  function handleInlineQuickActionsViewportResize() {
+    applyInlineQuickActionsPosition();
+  }
+
   function startInlineQuickActionsWatcher() {
     if (inlineQuickActionsState.watcherTimerId) return;
     inlineQuickActionsState.lastUrl = "";
-    syncInlineQuickActionsForCurrentRoute();
+    void Promise.all([refreshInlineQuickActionsData(), loadInlineQuickActionsPosition()]).then(() => {
+      syncInlineQuickActionsForCurrentRoute(true);
+    });
     inlineQuickActionsState.watcherTimerId = window.setInterval(
       syncInlineQuickActionsForCurrentRoute,
       INLINE_QUICK_ACTIONS_CHECK_INTERVAL_MS
     );
     document.addEventListener("pointerdown", closeInlinePanelWhenClickingOutside, true);
+    window.addEventListener("resize", handleInlineQuickActionsViewportResize);
   }
 
   applyHubSpotThemeFromSettingsStorage();
