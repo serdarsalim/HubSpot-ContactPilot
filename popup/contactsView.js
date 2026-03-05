@@ -235,14 +235,13 @@
                   <path d='M4 8l8 5 8-5'></path>
                 </svg>
               </button>
-              <input
-                type='text'
+              <textarea
                 class='row-quick-note-input'
                 data-record-id='${App.escapeHtml(recordId)}'
-                value='${App.escapeHtml(quickNoteValue)}'
                 aria-label='Quick note'
+                rows='1'
                 ${recordId ? "" : "disabled"}
-              />
+              >${App.escapeHtml(quickNoteValue)}</textarea>
             </span>
           </td>
         </tr>
