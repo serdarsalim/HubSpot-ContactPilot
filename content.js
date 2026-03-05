@@ -1980,8 +1980,8 @@
   }
 
   function getInlineQuickActionsDefaultPosition(width, height) {
-    const rightMargin = 14;
-    const topGap = 10;
+    const rightMargin = 30;
+    const topGap = 18;
     const fallbackTop = 72;
     let navBottom = 0;
 
@@ -2001,7 +2001,7 @@
       navBottom = Math.max(navBottom, Math.round(rect.bottom));
     }
 
-    const desiredTop = Math.max(fallbackTop, navBottom + topGap);
+    const desiredTop = Math.max(fallbackTop, navBottom + topGap, Math.round(window.innerHeight * 0.58) - 100);
     const desiredLeft = window.innerWidth - width - rightMargin;
     return clampInlineQuickActionsPosition({ left: desiredLeft, top: desiredTop }, width, height);
   }
@@ -2262,8 +2262,8 @@
     styleEl.textContent = `
       #${INLINE_QUICK_ACTIONS_ROOT_ID} {
         position: fixed;
-        right: 14px;
-        top: 72px;
+        right: 30px;
+        top: calc(58vh - 100px);
         z-index: 2147483000;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
