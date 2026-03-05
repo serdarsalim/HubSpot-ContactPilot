@@ -26,6 +26,14 @@
   const EMAIL_TEMPLATES_LOCAL_KEY = "popupEmailTemplates";
   const WHATSAPP_TEMPLATES_LOCAL_KEY = "popupWhatsappTemplates";
   const NOTE_TEMPLATES_LOCAL_KEY = "popupNoteTemplates";
+  const TEMPLATE_USAGE_LOCAL_KEY = "popupTemplateUsageByContact";
+  const INLINE_NOTE_TEMPLATE_USAGE_LOCAL_KEY = "popupInlineNoteTemplateUsageByContact";
+  const CLOUD_AUTH_LOCAL_KEY = "popupCloudAuth";
+  const CLOUD_AUTH_LIST_LOCAL_KEY = "popupCloudAuthList";
+  const CLOUD_EMAIL_CACHE_PREFIX = "popupCloudEmailTemplates::";
+  const CLOUD_WHATSAPP_CACHE_PREFIX = "popupCloudWhatsappTemplates::";
+  const CLOUD_NOTE_CACHE_PREFIX = "popupCloudNoteTemplates::";
+  const CLOUD_TEMPLATE_ID_PREFIX = "cloud_";
   const INLINE_QUICK_ACTIONS_ROOT_ID = "cpInlineQuickActionsRoot";
   const INLINE_QUICK_ACTIONS_STYLE_ID = "cpInlineQuickActionsStyle";
   const INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY = "popupInlineQuickActionsPosition";
@@ -92,6 +100,48 @@
           const nextPosition = normalizeInlineQuickActionsPosition(changes[INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY]?.newValue);
           inlineQuickActionsState.position = nextPosition;
           applyInlineQuickActionsPosition();
+        }
+
+        if (areaName === "local" && Object.prototype.hasOwnProperty.call(changes, TEMPLATE_USAGE_LOCAL_KEY)) {
+          inlineQuickActionsState.templateUsageByContact = normalizeInlineTemplateUsageMap(
+            changes[TEMPLATE_USAGE_LOCAL_KEY]?.newValue
+          );
+          if (inlineQuickActionsState.activeKind) {
+            renderInlineQuickActionsPanel(inlineQuickActionsState.activeKind);
+          }
+        }
+
+        if (areaName === "local" && Object.prototype.hasOwnProperty.call(changes, INLINE_NOTE_TEMPLATE_USAGE_LOCAL_KEY)) {
+          inlineQuickActionsState.noteTemplateUsageByContact = normalizeInlineNoteTemplateUsageMap(
+            changes[INLINE_NOTE_TEMPLATE_USAGE_LOCAL_KEY]?.newValue
+          );
+          if (inlineQuickActionsState.activeKind === "note") {
+            renderInlineQuickActionsPanel("note");
+          }
+        }
+
+        if (areaName === "local") {
+          const changedKeys = Object.keys(changes);
+          const templatesDataChanged = changedKeys.some((key) => {
+            return (
+              key === EMAIL_TEMPLATES_LOCAL_KEY ||
+              key === WHATSAPP_TEMPLATES_LOCAL_KEY ||
+              key === NOTE_TEMPLATES_LOCAL_KEY ||
+              key === CLOUD_AUTH_LIST_LOCAL_KEY ||
+              key === CLOUD_AUTH_LOCAL_KEY ||
+              key.startsWith(CLOUD_EMAIL_CACHE_PREFIX) ||
+              key.startsWith(CLOUD_WHATSAPP_CACHE_PREFIX) ||
+              key.startsWith(CLOUD_NOTE_CACHE_PREFIX)
+            );
+          });
+
+          if (templatesDataChanged && inlineQuickActionsState.rootEl) {
+            void refreshInlineQuickActionsData().then(() => {
+              if (inlineQuickActionsState.activeKind) {
+                renderInlineQuickActionsPanel(inlineQuickActionsState.activeKind);
+              }
+            });
+          }
         }
       });
     } catch (_error) {
@@ -1662,6 +1712,8 @@
       note: [],
       whatsapp: []
     },
+    templateUsageByContact: {},
+    noteTemplateUsageByContact: {},
     enabled: true,
     countryPrefix: DEFAULT_COUNTRY_CODE,
     position: null,
@@ -1701,6 +1753,180 @@
     const top = Number(rawPosition.top);
     if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
     return { left: Math.round(left), top: Math.round(top) };
+  }
+
+  function normalizeInlineUsageKind(kind) {
+    const key = String(kind || "").toLowerCase();
+    return key === "whatsapp" ? "whatsapp" : "email";
+  }
+
+  function normalizeInlineTemplateUsageMap(rawUsage) {
+    if (!rawUsage || typeof rawUsage !== "object") return {};
+    const normalized = {};
+
+    for (const [contactKeyInput, usageInput] of Object.entries(rawUsage)) {
+      const contactKey = String(contactKeyInput || "").trim();
+      if (!contactKey) continue;
+      const usage = usageInput && typeof usageInput === "object" ? usageInput : {};
+      const emailRaw = usage.email && typeof usage.email === "object" ? usage.email : {};
+      const whatsappRaw = usage.whatsapp && typeof usage.whatsapp === "object" ? usage.whatsapp : {};
+
+      const email = {};
+      for (const [templateIdInput, usedInput] of Object.entries(emailRaw)) {
+        const templateId = String(templateIdInput || "").trim();
+        if (!templateId || usedInput !== true) continue;
+        email[templateId] = true;
+      }
+
+      const whatsapp = {};
+      for (const [templateIdInput, usedInput] of Object.entries(whatsappRaw)) {
+        const templateId = String(templateIdInput || "").trim();
+        if (!templateId || usedInput !== true) continue;
+        whatsapp[templateId] = true;
+      }
+
+      normalized[contactKey] = { email, whatsapp };
+    }
+
+    return normalized;
+  }
+
+  function normalizeInlineNoteTemplateUsageMap(rawUsage) {
+    if (!rawUsage || typeof rawUsage !== "object") return {};
+    const normalized = {};
+
+    for (const [contactKeyInput, usageInput] of Object.entries(rawUsage)) {
+      const contactKey = String(contactKeyInput || "").trim();
+      if (!contactKey) continue;
+      const usage = usageInput && typeof usageInput === "object" ? usageInput : {};
+      const note = {};
+      for (const [templateIdInput, usedInput] of Object.entries(usage)) {
+        const templateId = String(templateIdInput || "").trim();
+        if (!templateId || usedInput !== true) continue;
+        note[templateId] = true;
+      }
+      normalized[contactKey] = note;
+    }
+
+    return normalized;
+  }
+
+  function normalizeInlineCloudAuthList(rawList, rawPrimary) {
+    const source = [];
+    if (Array.isArray(rawList)) source.push(...rawList);
+    if (rawPrimary && typeof rawPrimary === "object") source.push(rawPrimary);
+
+    const normalized = [];
+    const seen = new Set();
+    for (const item of source) {
+      const organizationId = cleanText(item?.organizationId || "");
+      if (!organizationId || seen.has(organizationId)) continue;
+      seen.add(organizationId);
+      normalized.push({ organizationId });
+    }
+    return normalized;
+  }
+
+  function getInlineCloudCacheKeys(organizationIdInput) {
+    const organizationId = cleanText(organizationIdInput || "");
+    if (!organizationId) return null;
+    return {
+      emailKey: `${CLOUD_EMAIL_CACHE_PREFIX}${organizationId}`,
+      whatsappKey: `${CLOUD_WHATSAPP_CACHE_PREFIX}${organizationId}`,
+      noteKey: `${CLOUD_NOTE_CACHE_PREFIX}${organizationId}`
+    };
+  }
+
+  function buildInlineCloudTemplateId(item, organizationIdInput = "") {
+    const directId = cleanText(item?.id || "");
+    if (directId.startsWith(CLOUD_TEMPLATE_ID_PREFIX)) return directId;
+    if (directId) {
+      const orgId = cleanText(item?.organizationId || organizationIdInput || "");
+      if (orgId) return `${CLOUD_TEMPLATE_ID_PREFIX}${orgId}_${directId}`;
+      return `${CLOUD_TEMPLATE_ID_PREFIX}${directId}`;
+    }
+
+    const cloudId = cleanText(item?.cloudId || "");
+    if (!cloudId) return "";
+    const orgId = cleanText(item?.organizationId || organizationIdInput || "");
+    if (orgId) return `${CLOUD_TEMPLATE_ID_PREFIX}${orgId}_${cloudId}`;
+    return `${CLOUD_TEMPLATE_ID_PREFIX}${cloudId}`;
+  }
+
+  function normalizeInlineCloudEmailTemplates(rawTemplates, organizationIdInput = "") {
+    const source = Array.isArray(rawTemplates) ? rawTemplates : [];
+    const templates = [];
+    const seen = new Set();
+
+    for (const item of source) {
+      const id = buildInlineCloudTemplateId(item, organizationIdInput);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      templates.push({
+        id,
+        name: cleanText(item?.name || "Untitled") || "Untitled",
+        subject: String(item?.subject || ""),
+        body: String(item?.body || ""),
+        source: "cloud"
+      });
+    }
+
+    return templates;
+  }
+
+  function normalizeInlineCloudWhatsappTemplates(rawTemplates, organizationIdInput = "") {
+    const source = Array.isArray(rawTemplates) ? rawTemplates : [];
+    const templates = [];
+    const seen = new Set();
+
+    for (const item of source) {
+      const id = buildInlineCloudTemplateId(item, organizationIdInput);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      templates.push({
+        id,
+        name: cleanText(item?.name || "Untitled") || "Untitled",
+        body: String(item?.body || ""),
+        source: "cloud"
+      });
+    }
+
+    return templates;
+  }
+
+  function normalizeInlineCloudNoteTemplates(rawTemplates, organizationIdInput = "") {
+    const source = Array.isArray(rawTemplates) ? rawTemplates : [];
+    const templates = [];
+    const seen = new Set();
+
+    for (const item of source) {
+      const id = buildInlineCloudTemplateId(item, organizationIdInput);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      templates.push({
+        id,
+        name: cleanText(item?.name || "Untitled") || "Untitled",
+        body: String(item?.body || ""),
+        source: "cloud"
+      });
+    }
+
+    return templates;
+  }
+
+  function mergeInlineTemplates(localTemplates, cloudTemplates) {
+    const merged = [];
+    const seen = new Set();
+    const source = [...(Array.isArray(localTemplates) ? localTemplates : []), ...(Array.isArray(cloudTemplates) ? cloudTemplates : [])];
+
+    for (const template of source) {
+      const id = cleanText(template?.id || "");
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      merged.push(template);
+    }
+
+    return merged;
   }
 
   function readStorageArea(areaName, keys) {
@@ -1753,27 +1979,139 @@
     };
   }
 
+  function getInlineQuickActionsDefaultPosition(width, height) {
+    const rightMargin = 14;
+    const topGap = 10;
+    const fallbackTop = 72;
+    let navBottom = 0;
+
+    const navCandidates = Array.from(
+      document.querySelectorAll("header, [role='banner'], nav, [data-test-id*='global'], [data-selenium-test*='global']")
+    );
+
+    for (const node of navCandidates) {
+      if (!(node instanceof Element)) continue;
+      if (!isVisible(node)) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.height <= 0 || rect.height > 140) continue;
+      if (rect.bottom <= 0) continue;
+      if (rect.top > 40) continue;
+      const style = window.getComputedStyle(node);
+      if (style.position !== "fixed" && style.position !== "sticky") continue;
+      navBottom = Math.max(navBottom, Math.round(rect.bottom));
+    }
+
+    const desiredTop = Math.max(fallbackTop, navBottom + topGap);
+    const desiredLeft = window.innerWidth - width - rightMargin;
+    return clampInlineQuickActionsPosition({ left: desiredLeft, top: desiredTop }, width, height);
+  }
+
   function applyInlineQuickActionsPosition() {
     const rootEl = inlineQuickActionsState.rootEl;
     if (!rootEl) return;
 
-    if (!inlineQuickActionsState.position) {
-      rootEl.style.left = "";
-      rootEl.style.top = "";
-      rootEl.style.right = "14px";
-      rootEl.style.bottom = "14px";
-      return;
-    }
-
     const rect = rootEl.getBoundingClientRect();
     const width = Math.max(1, Math.round(rect.width));
     const height = Math.max(1, Math.round(rect.height));
+
+    if (!inlineQuickActionsState.position) {
+      const anchored = getInlineQuickActionsDefaultPosition(width, height);
+      rootEl.style.left = `${anchored.left}px`;
+      rootEl.style.top = `${anchored.top}px`;
+      rootEl.style.right = "auto";
+      rootEl.style.bottom = "auto";
+      return;
+    }
+
     const next = clampInlineQuickActionsPosition(inlineQuickActionsState.position, width, height);
     inlineQuickActionsState.position = next;
     rootEl.style.left = `${next.left}px`;
     rootEl.style.top = `${next.top}px`;
     rootEl.style.right = "auto";
     rootEl.style.bottom = "auto";
+  }
+
+  function getInlineUsageContactKey() {
+    const recordId = String(getRecordIdFromPath() || "").replace(/\D/g, "");
+    if (!recordId) return "";
+    return `record_${recordId}`;
+  }
+
+  function getInlineTemplateUsageForContact(contactKey) {
+    const key = String(contactKey || "").trim();
+    if (!key) return null;
+    if (!inlineQuickActionsState.templateUsageByContact[key]) {
+      inlineQuickActionsState.templateUsageByContact[key] = {
+        email: Object.create(null),
+        whatsapp: Object.create(null)
+      };
+    }
+    return inlineQuickActionsState.templateUsageByContact[key];
+  }
+
+  function getInlineNoteTemplateUsageForContact(contactKey) {
+    const key = String(contactKey || "").trim();
+    if (!key) return null;
+    if (!inlineQuickActionsState.noteTemplateUsageByContact[key]) {
+      inlineQuickActionsState.noteTemplateUsageByContact[key] = Object.create(null);
+    }
+    return inlineQuickActionsState.noteTemplateUsageByContact[key];
+  }
+
+  function hasInlineTemplateBeenUsed(kind, templateIdInput) {
+    const contactKey = getInlineUsageContactKey();
+    const templateId = String(templateIdInput || "").trim();
+    if (!contactKey || !templateId) return false;
+
+    if (String(kind || "").toLowerCase() === "note") {
+      const usage = getInlineNoteTemplateUsageForContact(contactKey);
+      return !!usage && usage[templateId] === true;
+    }
+
+    const usage = getInlineTemplateUsageForContact(contactKey);
+    if (!usage) return false;
+    const usageKind = normalizeInlineUsageKind(kind);
+    return usage[usageKind][templateId] === true;
+  }
+
+  function persistInlineTemplateUsage() {
+    const payload = normalizeInlineTemplateUsageMap(inlineQuickActionsState.templateUsageByContact);
+    inlineQuickActionsState.templateUsageByContact = payload;
+    try {
+      chrome.storage.local.set({ [TEMPLATE_USAGE_LOCAL_KEY]: payload });
+    } catch (_error) {
+      // Ignore storage write failures.
+    }
+  }
+
+  function persistInlineNoteTemplateUsage() {
+    const payload = normalizeInlineNoteTemplateUsageMap(inlineQuickActionsState.noteTemplateUsageByContact);
+    inlineQuickActionsState.noteTemplateUsageByContact = payload;
+    try {
+      chrome.storage.local.set({ [INLINE_NOTE_TEMPLATE_USAGE_LOCAL_KEY]: payload });
+    } catch (_error) {
+      // Ignore storage write failures.
+    }
+  }
+
+  function markInlineTemplateUsed(kind, templateIdInput) {
+    const contactKey = getInlineUsageContactKey();
+    const templateId = String(templateIdInput || "").trim();
+    if (!contactKey || !templateId) return;
+
+    if (String(kind || "").toLowerCase() === "note") {
+      const usage = getInlineNoteTemplateUsageForContact(contactKey);
+      if (!usage) return;
+      usage[templateId] = true;
+      persistInlineNoteTemplateUsage();
+      return;
+    }
+
+    const usage = getInlineTemplateUsageForContact(contactKey);
+    if (!usage) return;
+    const usageKind = normalizeInlineUsageKind(kind);
+    usage[usageKind][templateId] = true;
+    persistInlineTemplateUsage();
   }
 
   function inlineTokenKey(input) {
@@ -1836,7 +2174,8 @@
         id: cleanText(template?.id || `email_template_${index + 1}`),
         name: cleanText(template?.name || `Email ${index + 1}`) || `Email ${index + 1}`,
         subject: String(template?.subject || ""),
-        body: String(template?.body || "")
+        body: String(template?.body || ""),
+        source: "local"
       }))
       .filter((template) => !!template.id);
   }
@@ -1847,7 +2186,8 @@
       .map((template, index) => ({
         id: cleanText(template?.id || `note_template_${index + 1}`),
         name: cleanText(template?.name || `Note ${index + 1}`) || `Note ${index + 1}`,
-        body: String(template?.body || "")
+        body: String(template?.body || ""),
+        source: "local"
       }))
       .filter((template) => !!template.id);
   }
@@ -1858,7 +2198,8 @@
       .map((template, index) => ({
         id: cleanText(template?.id || `wa_template_${index + 1}`),
         name: cleanText(template?.name || `WhatsApp ${index + 1}`) || `WhatsApp ${index + 1}`,
-        body: String(template?.body || "")
+        body: String(template?.body || ""),
+        source: "local"
       }))
       .filter((template) => !!template.id);
   }
@@ -1867,13 +2208,50 @@
     const local = await readStorageArea("local", [
       EMAIL_TEMPLATES_LOCAL_KEY,
       NOTE_TEMPLATES_LOCAL_KEY,
-      WHATSAPP_TEMPLATES_LOCAL_KEY
+      WHATSAPP_TEMPLATES_LOCAL_KEY,
+      TEMPLATE_USAGE_LOCAL_KEY,
+      INLINE_NOTE_TEMPLATE_USAGE_LOCAL_KEY,
+      CLOUD_AUTH_LIST_LOCAL_KEY,
+      CLOUD_AUTH_LOCAL_KEY
     ]);
     const sync = await readStorageArea("sync", [SETTINGS_KEY]);
 
-    inlineQuickActionsState.templates.email = normalizeInlineEmailTemplates(local?.[EMAIL_TEMPLATES_LOCAL_KEY]);
-    inlineQuickActionsState.templates.note = normalizeInlineNoteTemplates(local?.[NOTE_TEMPLATES_LOCAL_KEY]);
-    inlineQuickActionsState.templates.whatsapp = normalizeInlineWhatsappTemplates(local?.[WHATSAPP_TEMPLATES_LOCAL_KEY]);
+    const cloudAuthList = normalizeInlineCloudAuthList(local?.[CLOUD_AUTH_LIST_LOCAL_KEY], local?.[CLOUD_AUTH_LOCAL_KEY]);
+    const cacheKeys = [];
+    for (const auth of cloudAuthList) {
+      const keys = getInlineCloudCacheKeys(auth.organizationId);
+      if (!keys) continue;
+      cacheKeys.push(keys.emailKey, keys.whatsappKey, keys.noteKey);
+    }
+    const cloudCache = cacheKeys.length ? await readStorageArea("local", cacheKeys) : {};
+
+    const cloudEmailTemplates = [];
+    const cloudWhatsappTemplates = [];
+    const cloudNoteTemplates = [];
+    for (const auth of cloudAuthList) {
+      const keys = getInlineCloudCacheKeys(auth.organizationId);
+      if (!keys) continue;
+      cloudEmailTemplates.push(...normalizeInlineCloudEmailTemplates(cloudCache?.[keys.emailKey], auth.organizationId));
+      cloudWhatsappTemplates.push(...normalizeInlineCloudWhatsappTemplates(cloudCache?.[keys.whatsappKey], auth.organizationId));
+      cloudNoteTemplates.push(...normalizeInlineCloudNoteTemplates(cloudCache?.[keys.noteKey], auth.organizationId));
+    }
+
+    inlineQuickActionsState.templates.email = mergeInlineTemplates(
+      normalizeInlineEmailTemplates(local?.[EMAIL_TEMPLATES_LOCAL_KEY]),
+      cloudEmailTemplates
+    );
+    inlineQuickActionsState.templates.note = mergeInlineTemplates(
+      normalizeInlineNoteTemplates(local?.[NOTE_TEMPLATES_LOCAL_KEY]),
+      cloudNoteTemplates
+    );
+    inlineQuickActionsState.templates.whatsapp = mergeInlineTemplates(
+      normalizeInlineWhatsappTemplates(local?.[WHATSAPP_TEMPLATES_LOCAL_KEY]),
+      cloudWhatsappTemplates
+    );
+    inlineQuickActionsState.templateUsageByContact = normalizeInlineTemplateUsageMap(local?.[TEMPLATE_USAGE_LOCAL_KEY]);
+    inlineQuickActionsState.noteTemplateUsageByContact = normalizeInlineNoteTemplateUsageMap(
+      local?.[INLINE_NOTE_TEMPLATE_USAGE_LOCAL_KEY]
+    );
     applyInlineQuickActionsSettings(sync?.[SETTINGS_KEY], { sync: false });
   }
 
@@ -1885,7 +2263,7 @@
       #${INLINE_QUICK_ACTIONS_ROOT_ID} {
         position: fixed;
         right: 14px;
-        bottom: 14px;
+        top: 72px;
         z-index: 2147483000;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
@@ -1985,7 +2363,10 @@
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn {
-        display: block;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
         width: 100%;
         border: 0;
         border-radius: 7px;
@@ -1995,6 +2376,37 @@
         font-size: 12px;
         padding: 6px 7px;
         cursor: pointer;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-cloud {
+        font-size: 12px;
+        line-height: 1;
+        color: #4b6f94;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-check {
+        font-size: 12px;
+        font-weight: 700;
+        color: transparent;
+        flex-shrink: 0;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-check.is-used {
+        color: #19733d;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn:hover {
@@ -2057,6 +2469,14 @@
 
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn:hover {
         background: rgba(173, 205, 238, 0.18) !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-cloud {
+        color: #bad4ef !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-check.is-used {
+        color: #8ee0a6 !important;
       }
 
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-empty,
@@ -2122,10 +2542,21 @@
     }
 
     inlineQuickActionsState.panelEl.innerHTML = templates
-      .map(
-        (template) =>
-          `<button type='button' class='cp-inline-template-btn' data-template-kind='${escapeHtml(inlineQuickActionsState.activeKind)}' data-template-id='${escapeHtml(template.id)}'>${escapeHtml(template.name || "Untitled")}</button>`
-      )
+      .map((template) => {
+        const isUsed = hasInlineTemplateBeenUsed(inlineQuickActionsState.activeKind, template.id);
+        const isCloud = String(template?.source || "").toLowerCase() === "cloud";
+        return (
+          `<button type='button' class='cp-inline-template-btn' data-template-kind='${escapeHtml(
+            inlineQuickActionsState.activeKind
+          )}' data-template-id='${escapeHtml(template.id)}'>` +
+          `<span class='cp-inline-template-label'>${escapeHtml(template.name || "Untitled")}</span>` +
+          "<span class='cp-inline-template-meta'>" +
+          `${isCloud ? "<span class='cp-inline-template-cloud' aria-hidden='true' title='Cloud template'>☁</span>" : ""}` +
+          `<span class='cp-inline-template-check ${isUsed ? "is-used" : ""}' aria-hidden='true'>✓</span>` +
+          "</span>" +
+          "</button>"
+        );
+      })
       .join("");
   }
 
@@ -2190,12 +2621,15 @@
     try {
       if (kind === "email") {
         await applyInlineEmailTemplate(template);
+        markInlineTemplateUsed("email", template.id);
         setInlineQuickActionsStatus(`Email applied: ${template.name}`, "success");
       } else if (kind === "note") {
         await applyInlineNoteTemplate(template);
+        markInlineTemplateUsed("note", template.id);
         setInlineQuickActionsStatus(`Note created: ${template.name}`, "success");
       } else if (kind === "whatsapp") {
         applyInlineWhatsappTemplate(template);
+        markInlineTemplateUsed("whatsapp", template.id);
         setInlineQuickActionsStatus(`WhatsApp opened: ${template.name}`, "success");
       }
       renderInlineQuickActionsPanel("");
