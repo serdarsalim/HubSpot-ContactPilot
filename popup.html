@@ -848,6 +848,48 @@
         text-decoration: underline;
       }
 
+      .active-tab-note-link,
+      .active-tab-note-static {
+        width: 100%;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        text-align: left;
+      }
+
+      .active-tab-note-link:hover {
+        text-decoration: none;
+      }
+
+      .active-tab-note-text {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .active-tab-note-meta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+      }
+
+      .active-tab-note-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 20px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #e8eef7;
+        color: #52667d;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
       .active-tab-phone-wrap {
         display: inline-flex;
         align-items: center;
@@ -970,6 +1012,17 @@
 
       html:not([data-launch-mode="detached"]) .active-tab-page {
         overflow-y: auto;
+        padding: 0 8px 12px;
+        box-sizing: border-box;
+      }
+
+      html:not([data-launch-mode="detached"]) .active-tab-card {
+        max-width: 680px;
+        margin: 16px auto 0;
+      }
+
+      html:not([data-launch-mode="detached"]) .active-tab-grid {
+        grid-template-columns: minmax(0, 1fr);
       }
 
       html:not([data-launch-mode="detached"]) .settings-page {
@@ -2043,6 +2096,11 @@
 
       body[data-theme="dark"] .active-tab-inline-link {
         color: #82bdff;
+      }
+
+      body[data-theme="dark"] .active-tab-note-pill {
+        background: #2d4764;
+        color: #cddbed;
       }
 
       body[data-theme="dark"] .active-tab-whatsapp-link {

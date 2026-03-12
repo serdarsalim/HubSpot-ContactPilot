@@ -91,6 +91,32 @@
     el.innerHTML = App.escapeHtml(next).replace(/\n/g, "<br>");
   }
 
+  function stripNoteTimezoneNoise(value) {
+    return String(value || "")
+      .replace(/\s+GMT\s*[+-]?\s*\d{1,2}(?::?\d{2})?/gi, "")
+      .replace(/\s+UTC\s*[+-]?\s*\d{1,2}(?::?\d{2})?/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function parseLatestNoteDisplay(value) {
+    const raw = stripNoteTimezoneNoise(value);
+    if (!raw) return { noteText: "", author: "", dateLabel: "" };
+
+    const match = raw.match(
+      /^by\s+(.+?)\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},\s+\d{4})(?:\s+at\s+\d{1,2}:\d{2}\s*[ap]m)?\s+(.+)$/i
+    );
+    if (!match) {
+      return { noteText: raw, author: "", dateLabel: "" };
+    }
+
+    return {
+      author: String(match[1] || "").trim(),
+      dateLabel: String(match[2] || "").trim(),
+      noteText: String(match[3] || "").trim()
+    };
+  }
+
   function normalizePhoneDisplay(value) {
     return String(value || "")
       .replace(/^tel:/i, "")
@@ -227,13 +253,22 @@
       }
     }
     if (dom.activeTabLatestNoteEl) {
-      const linkLabel = latestNote || "Open Notes";
+      const parsedLatestNote = parseLatestNoteDisplay(latestNote);
+      const noteText = parsedLatestNote.noteText || latestNote || "Open Notes";
+      const metaBits = [parsedLatestNote.dateLabel, parsedLatestNote.author].filter(Boolean);
+      const metaHtml = metaBits.length
+        ? `<span class="active-tab-note-meta">${metaBits
+            .map((bit) => `<span class="active-tab-note-pill">${App.escapeHtml(bit)}</span>`)
+            .join("")}</span>`
+        : "";
       if (kind === "contact" && contact) {
-        dom.activeTabLatestNoteEl.innerHTML = `<button type="button" class="active-tab-inline-link" data-active-tab-open-notes="1">${App.escapeHtml(
-          linkLabel
-        )}</button>`;
+        dom.activeTabLatestNoteEl.innerHTML = `<button type="button" class="active-tab-inline-link active-tab-note-link" data-active-tab-open-notes="1"><span class="active-tab-note-text">${App.escapeHtml(
+          noteText
+        )}</span>${metaHtml}</button>`;
       } else {
-        dom.activeTabLatestNoteEl.textContent = latestNote || "No recent notes";
+        dom.activeTabLatestNoteEl.innerHTML = `<span class="active-tab-note-static"><span class="active-tab-note-text">${App.escapeHtml(
+          noteText || "No recent notes"
+        )}</span>${metaHtml}</span>`;
       }
     }
     setMultilineText(dom.activeTabLatestTaskEl, latestTask, "No recent tasks");
@@ -278,7 +313,7 @@
 
       renderActiveTabContext();
       if (kind === "contact") {
-        setActiveTabStatus("Active contact loaded. Use the links in this card.");
+        setActiveTabStatus("");
       } else {
         setActiveTabStatus("Selected tab is not a contact record. Open a contact record to use Email/WhatsApp/Notes actions.");
       }
