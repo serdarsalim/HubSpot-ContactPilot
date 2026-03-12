@@ -401,7 +401,7 @@
       const tab = resolved?.tab || null;
       if (!tab || typeof tab.id !== "number") {
         App.setStatusWarning("");
-        App.setStatus("Open a HubSpot contacts table tab on any HubSpot app domain, refresh it, and try again.");
+        App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
         return;
       }
 
@@ -419,7 +419,7 @@
 
       if (!App.isValidContactsPayload(response)) {
         App.setStatusWarning("");
-        App.setStatus("Open a HubSpot contacts table tab on any HubSpot app domain, refresh it, and try again.");
+        App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
         return;
       }
 
