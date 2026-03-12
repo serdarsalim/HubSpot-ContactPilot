@@ -1046,6 +1046,17 @@
     return true;
   }
 
+  function clickTaskActivityTab() {
+    const labels = ["tasks", "task", "to-dos", "to do", "todo"];
+    for (const label of labels) {
+      const tab = findHubSpotCenterTabControl(label);
+      if (!tab) continue;
+      tab.click();
+      return true;
+    }
+    return false;
+  }
+
   function setEditorText(editor, noteBody) {
     const text = String(noteBody || "").trim();
     if (!text) return;
@@ -2293,9 +2304,10 @@
         padding: 9px 10px 5px;
         cursor: grab;
         user-select: none;
-        color: #173656;
-        background: linear-gradient(180deg, #eef6ff 0%, #f7fbff 100%);
-        border-bottom: 1px solid #d8e4f2;
+        color: #153453;
+        background: linear-gradient(180deg, #dcecff 0%, #ecf5ff 62%, #f7fbff 100%);
+        border-bottom: 1px solid #c6daee;
+        box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.45);
         border-top-left-radius: 10px;
         border-top-right-radius: 10px;
       }
@@ -2498,6 +2510,9 @@
     if (kind === "note") {
       return "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 20h4l10-10-4-4L4 16v4z'></path><path d='M13 7l4 4'></path></svg>";
     }
+    if (kind === "task") {
+      return "<svg viewBox='0 0 24 24' aria-hidden='true'><rect x='4' y='4' width='16' height='16' rx='2'></rect><path d='M8 12l2.5 2.5L16 9'></path></svg>";
+    }
     return "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 4c4.7 0 8.5 3.4 8.5 7.5S16.7 19 12 19c-1 0-2-.2-2.9-.5L4 20l1.4-3.8C4.5 14.9 4 13.2 4 11.5 4 7.4 7.8 4 12 4z'></path><circle cx='9' cy='11.5' r='0.9'></circle><circle cx='12' cy='11.5' r='0.9'></circle><circle cx='15' cy='11.5' r='0.9'></circle></svg>";
   }
 
@@ -2611,6 +2626,172 @@
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  function isTaskComposerDialog(dialog) {
+    if (!(dialog instanceof Element) || !isVisible(dialog)) return false;
+    const text = elementText(dialog).toLowerCase();
+    if (!text) return false;
+    if (text === "task") return true;
+    if (text.includes("create task")) return true;
+    if (text.includes("create tasks")) return true;
+    if (text.includes("enter your task")) return true;
+    if (text.includes("activity date") && text.includes("send reminder")) return true;
+    if (text.includes("task type") && text.includes("activity assigned to")) return true;
+    if (text.includes("associated with") && text.includes("create")) return true;
+    if (text.includes("task title")) return true;
+    if (text.includes("task due date")) return true;
+    if (text.includes("mark task as complete")) return true;
+    if (text.includes("reminder") && text.includes("task")) return true;
+    return false;
+  }
+
+  function isTaskComposerRoot(root) {
+    if (!(root instanceof Element) || !isVisible(root)) return false;
+    const text = elementText(root).toLowerCase();
+    if (!text) return false;
+
+    let score = 0;
+    if (text === "task") score += 10;
+    if (text.includes("create task")) score += 18;
+    if (text.includes("create tasks")) score += 18;
+    if (text.includes("enter your task")) score += 18;
+    if (text.includes("activity date")) score += 8;
+    if (text.includes("send reminder")) score += 8;
+    if (text.includes("set to repeat")) score += 8;
+    if (text.includes("task type")) score += 8;
+    if (text.includes("activity assigned to")) score += 8;
+    if (text.includes("associated with")) score += 6;
+    if (text.includes("task title")) score += 18;
+    if (text.includes("task due date")) score += 10;
+    if (text.includes("reminder")) score += 6;
+    if (text.includes("queue")) score += 4;
+    if (text.includes("assigned to")) score += 4;
+    if (text.includes("mark task as complete")) score += 6;
+    if (root.matches("[role='dialog']")) score += 8;
+    if (root.querySelector("input, textarea, [contenteditable='true'], [role='textbox']")) score += 6;
+
+    return score >= 18;
+  }
+
+  function getTaskContextText(element) {
+    const scopes = [
+      element?.closest("[role='dialog']"),
+      element?.closest("[role='menu']"),
+      element?.closest("[role='toolbar']"),
+      element?.closest("[role='tablist']"),
+      element?.closest("section"),
+      element?.closest("article"),
+      element?.closest("main"),
+      element?.parentElement
+    ].filter(Boolean);
+
+    const seen = new Set();
+    const parts = [];
+    for (const scope of scopes) {
+      if (!(scope instanceof Element)) continue;
+      if (seen.has(scope)) continue;
+      seen.add(scope);
+      parts.push(elementText(scope).toLowerCase());
+    }
+    return cleanText(parts.join(" ")).toLowerCase();
+  }
+
+  function hasTaskComposerOpen() {
+    const dialogOpen = Array.from(document.querySelectorAll("[role='dialog']")).some((dialog) => isTaskComposerDialog(dialog));
+    if (dialogOpen) return true;
+
+    const candidateRoots = Array.from(
+      document.querySelectorAll("form, section, article, [role='region'], [data-test-id], [data-testid], [data-selenium-test]")
+    );
+    return candidateRoots.some((root) => isTaskComposerRoot(root));
+  }
+
+  function findCreateTaskTrigger() {
+    const candidates = Array.from(document.querySelectorAll("button, [role='button'], a")).filter((el) => isVisible(el));
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const el of candidates) {
+      const text = elementText(el).toLowerCase();
+      const aria = cleanText(el.getAttribute?.("aria-label") || "").toLowerCase();
+      const testId = cleanText(
+        el.getAttribute?.("data-test-id") || el.getAttribute?.("data-testid") || el.getAttribute?.("data-selenium-test") || ""
+      ).toLowerCase();
+      const hint = `${text} ${aria} ${testId}`.trim();
+      if (!hint) continue;
+      const taskContextText = getTaskContextText(el);
+      const opensTaskComposer =
+        hint.includes("create task") ||
+        hint.includes("create tasks") ||
+        hint.includes("add task") ||
+        hint.includes("new task") ||
+        hint.includes("task title") ||
+        hint.includes("to-do") ||
+        hint.includes("todo") ||
+        ((hint === "add" || hint === "+ add" || hint === "create") &&
+          (taskContextText.includes("tasks") || taskContextText.includes("task") || taskContextText.includes("to-do")));
+      if (!opensTaskComposer) continue;
+
+      let score = 0;
+      if (hint.includes("create task")) score += 40;
+      if (hint.includes("create tasks")) score += 40;
+      if (hint.includes("to-do") || hint.includes("todo")) score += 12;
+      if (hint.includes("add task")) score += 22;
+      if (hint.includes("new task")) score += 22;
+      if (hint.includes("task title")) score += 20;
+      if (hint === "add" || hint === "+ add") score += 24;
+      if (hint === "create") score += 18;
+      if (hint.includes("log")) score -= 10;
+      if (hint.includes("mark") && hint.includes("complete")) score -= 24;
+      if (hint.includes("assigned")) score -= 18;
+      if (hint.includes("filter")) score -= 22;
+      if (hint.includes("recent")) score -= 14;
+
+      const classText = String(el.className || "").toLowerCase();
+      if (classText.includes("private-button")) score += 3;
+      if (classText.includes("primary")) score += 2;
+
+      const root = el.closest("[role='dialog'], [role='menu'], [role='toolbar'], [role='tablist'], section, article, li, div") || el;
+      const rootText = elementText(root).toLowerCase();
+      if (rootText.includes("task is incomplete")) score -= 28;
+      if (rootText.includes("activity")) score += 4;
+      if (rootText.includes("notes") && rootText.includes("emails")) score += 8;
+      if (rootText.includes("about this contact")) score -= 28;
+      if (el.getAttribute("role") === "tab") score -= 40;
+      if (taskContextText.includes("tasks")) score += 12;
+      if (taskContextText.includes("to-do") || taskContextText.includes("todo")) score += 8;
+      if (taskContextText.includes("activity date")) score += 4;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = el;
+      }
+    }
+
+    return bestScore >= 14 ? best : null;
+  }
+
+  async function openTaskComposerOnPage() {
+    if (hasTaskComposerOpen()) {
+      return { ok: true };
+    }
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (attempt === 0 || attempt % 3 === 0) clickActivitiesTab();
+      if (attempt === 1 || attempt % 3 === 1) clickTaskActivityTab();
+      await sleep(180);
+      const trigger = findCreateTaskTrigger();
+      if (trigger) {
+        trigger.click();
+      }
+      await sleep(260);
+      if (hasTaskComposerOpen()) {
+        return { ok: true };
+      }
+    }
+
+    throw new Error("Could not open the HubSpot task composer.");
+  }
+
   async function handleInlineTemplateSelection(kind, templateId) {
     if (inlineQuickActionsState.busy) return;
     const templates = inlineQuickActionsState.templates?.[kind] || [];
@@ -2649,6 +2830,22 @@
     if (inlineQuickActionsState.busy) return;
     const selectedKind = String(kind || "");
     if (!selectedKind) return;
+
+    if (selectedKind === "task") {
+      setInlineQuickActionsBusy(true);
+      setInlineQuickActionsStatus("");
+      try {
+        await openTaskComposerOnPage();
+        renderInlineQuickActionsPanel("");
+        setInlineQuickActionsStatus("");
+      } catch (error) {
+        const reason = cleanText(String(error?.message || error || "Could not open task composer."));
+        setInlineQuickActionsStatus(reason || "Could not open task composer.", "error");
+      } finally {
+        setInlineQuickActionsBusy(false);
+      }
+      return;
+    }
 
     await refreshInlineQuickActionsData();
 
@@ -2765,6 +2962,8 @@
           <button type='button' class='cp-inline-action-btn' data-kind='email' aria-label='Email templates' title='Email templates'>${inlineActionIcon("email")}</button>
           <span class='cp-inline-divider'>|</span>
           <button type='button' class='cp-inline-action-btn' data-kind='note' aria-label='Note templates' title='Note templates'>${inlineActionIcon("note")}</button>
+          <span class='cp-inline-divider'>|</span>
+          <button type='button' class='cp-inline-action-btn' data-kind='task' aria-label='Create task' title='Create task'>${inlineActionIcon("task")}</button>
           <span class='cp-inline-divider'>|</span>
           <button type='button' class='cp-inline-action-btn' data-kind='whatsapp' aria-label='WhatsApp templates' title='WhatsApp templates'>${inlineActionIcon("whatsapp")}</button>
         </div>
