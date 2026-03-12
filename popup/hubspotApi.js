@@ -90,6 +90,25 @@
     return null;
   }
 
+  async function refreshHubSpotContactsSourceTab() {
+    const activeHubSpotTab = await findActiveHubSpotTab();
+    const tabToRefresh =
+      activeHubSpotTab && typeof activeHubSpotTab.id === "number"
+        ? activeHubSpotTab
+        : await findHubSpotTab();
+
+    if (!tabToRefresh || typeof tabToRefresh.id !== "number") return null;
+
+    await chrome.tabs.reload(tabToRefresh.id);
+    await waitForTabComplete(tabToRefresh.id);
+    await sleep(timing.contactTabPostLoadDelayMs);
+    try {
+      return await chrome.tabs.get(tabToRefresh.id);
+    } catch (_error) {
+      return tabToRefresh;
+    }
+  }
+
   async function findBestContactRecordTab() {
     const activeTab = await findActiveHubSpotTab();
     const hubSpotTabs = await chrome.tabs.query({ url: hubSpotUrlPatterns });
@@ -377,6 +396,7 @@
   Object.assign(App, {
     findHubSpotTab,
     findBestContactsTab,
+    refreshHubSpotContactsSourceTab,
     findBestContactRecordTab,
     extractPortalIdFromUrl,
     isValidContactsPayload,

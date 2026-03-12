@@ -225,8 +225,38 @@
     });
   }
 
-  dom.refreshBtn.addEventListener("click", () => {
-    void App.loadContacts({ loadAll: true });
+  dom.refreshBtn.addEventListener("click", async () => {
+    const state = App.state || {};
+    const settings = state.settings || {};
+
+    try {
+      const resolved = await App.findBestContactsTab({
+        countryPrefix: settings.countryPrefix,
+        messageText: settings.messageTemplate
+      });
+
+      if (resolved?.tab && App.isValidContactsPayload(resolved?.probeResponse)) {
+        await App.loadContacts({ loadAll: true });
+        return;
+      }
+
+      App.setStatus("Refreshing HubSpot contacts tab...");
+      const refreshedTab = await App.refreshHubSpotContactsSourceTab();
+      if (!refreshedTab || typeof refreshedTab.id !== "number") {
+        App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
+        return;
+      }
+
+      await App.loadContacts({ loadAll: true });
+    } catch (_error) {
+      App.setStatus("Refreshing HubSpot contacts tab...");
+      const refreshedTab = await App.refreshHubSpotContactsSourceTab();
+      if (!refreshedTab || typeof refreshedTab.id !== "number") {
+        App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
+        return;
+      }
+      await App.loadContacts({ loadAll: true });
+    }
   });
   if (dom.copyEmailBtn) {
     dom.copyEmailBtn.addEventListener("click", () => {
