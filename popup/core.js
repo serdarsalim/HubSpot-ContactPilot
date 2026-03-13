@@ -309,9 +309,20 @@
     const currentIds = columns
       .map((col) => String(col?.id || "").trim())
       .filter((id) => id.length > 0);
-    const currentIdSet = new Set(currentIds);
     const normalized = [];
     const seen = new Set();
+
+    if (!currentIds.length) {
+      source.forEach((value) => {
+        const colId = String(value || "").trim();
+        if (!colId || seen.has(colId)) return;
+        seen.add(colId);
+        normalized.push(colId);
+      });
+      return normalized;
+    }
+
+    const currentIdSet = new Set(currentIds);
 
     source.forEach((value) => {
       const colId = String(value || "").trim();
