@@ -351,12 +351,27 @@
     return values;
   }
 
+  function extractContactRecordIdFromHref(hrefInput) {
+    const href = String(hrefInput || "").trim();
+    if (!href) return "";
+    const match = href.match(/\/record\/0-1\/(\d+)/i);
+    return match ? String(match[1]) : "";
+  }
+
   function extractRecordIdFromRow(row) {
     if (!(row instanceof Element)) return "";
-    const anchor = row.querySelector("a[href*='/record/0-1/']");
-    const href = anchor?.getAttribute("href") || "";
-    const match = String(href).match(/\/record\/0-1\/(\d+)/i);
-    return match ? String(match[1]) : "";
+
+    const linkCandidates = Array.from(row.querySelectorAll("a[href], [data-href], [data-url], [href]"));
+    for (const element of linkCandidates) {
+      if (!(element instanceof Element)) continue;
+      const href = element.getAttribute("href") || element.getAttribute("data-href") || element.getAttribute("data-url") || "";
+      const recordId = extractContactRecordIdFromHref(href);
+      if (recordId) return recordId;
+    }
+
+    const rowHtml = String(row.innerHTML || "");
+    const fallbackRecordId = extractContactRecordIdFromHref(rowHtml);
+    return fallbackRecordId || "";
   }
 
   function buildContactFromValues(row, values, columns, phoneColumnId, nameColumnId, countryPrefix, messageText) {
