@@ -893,7 +893,8 @@
         ? dom.inlineQuickActionsEnabledInput.checked
         : true,
       visibleColumns,
-      columnWidths: App.normalizeColumnWidths(state.settings.columnWidths)
+      columnWidths: App.normalizeColumnWidths(state.settings.columnWidths),
+      columnOrder: App.normalizeColumnOrder(state.settings.columnOrder)
     };
   }
 
@@ -1950,6 +1951,7 @@
         ...(savedWithoutLegacy.visibleColumns || {})
       },
       columnWidths: App.normalizeColumnWidths(savedWithoutLegacy.columnWidths),
+      columnOrder: App.normalizeColumnOrder(savedWithoutLegacy.columnOrder),
       emailTemplates,
       whatsappTemplates,
       noteTemplates

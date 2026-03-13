@@ -3,6 +3,7 @@
   const { dom, state } = App;
   let activeColumnResize = null;
   let suppressSortUntil = 0;
+  let activeColumnReorder = null;
 
   function updateRecordIdColumnWarning(columns = state.currentColumns) {
     if (typeof App.setStatusWarning !== "function") return;
@@ -119,12 +120,6 @@
       column.style.minWidth = nextWidth;
       column.style.maxWidth = nextWidth;
     });
-    dom.listEl.querySelectorAll(`[data-col-id="${escapedColId}"]`).forEach((cell) => {
-      if (!(cell instanceof HTMLElement)) return;
-      cell.style.width = nextWidth;
-      cell.style.minWidth = nextWidth;
-      cell.style.maxWidth = nextWidth;
-    });
   }
 
   function beginColumnResize(event, col) {
@@ -199,6 +194,137 @@
     });
   }
 
+  function clearColumnDropIndicators() {
+    if (!dom.listEl) return;
+    dom.listEl.querySelectorAll(".drop-before, .drop-after, .is-reordering").forEach((cell) => {
+      if (!(cell instanceof HTMLElement)) return;
+      cell.classList.remove("drop-before", "drop-after", "is-reordering");
+    });
+  }
+
+  function getDropTargetFromPointer(clientX, sourceColId) {
+    if (!dom.listEl) return null;
+    const headers = Array.from(dom.listEl.querySelectorAll("th.resizable[data-col-id]")).filter((header) => header instanceof HTMLElement);
+    for (const header of headers) {
+      const targetColId = String(header.getAttribute("data-col-id") || "").trim();
+      if (!targetColId || targetColId === sourceColId) continue;
+      const rect = header.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right) continue;
+      return {
+        targetColId,
+        position: clientX < rect.left + rect.width / 2 ? "before" : "after"
+      };
+    }
+    return null;
+  }
+
+  function markColumnDropTarget(sourceColId, targetColId, position) {
+    if (!dom.listEl) return;
+    clearColumnDropIndicators();
+    const escapedSourceId = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(sourceColId) : sourceColId.replace(/["\\]/g, "\\$&");
+    const escapedTargetId = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(targetColId) : targetColId.replace(/["\\]/g, "\\$&");
+    dom.listEl.querySelectorAll(`[data-col-id="${escapedSourceId}"]`).forEach((cell) => {
+      if (!(cell instanceof HTMLElement)) return;
+      cell.classList.add("is-reordering");
+    });
+    dom.listEl.querySelectorAll(`[data-col-id="${escapedTargetId}"]`).forEach((cell) => {
+      if (!(cell instanceof HTMLElement)) return;
+      cell.classList.add(position === "before" ? "drop-before" : "drop-after");
+    });
+  }
+
+  function beginColumnReorder(event, colId) {
+    if (!(event instanceof PointerEvent)) return;
+    if (!colId || !dom.listEl) return;
+    activeColumnReorder = {
+      pointerId: event.pointerId,
+      sourceColId: colId,
+      started: false,
+      startX: event.clientX,
+      handleEl: event.currentTarget instanceof HTMLElement ? event.currentTarget : null,
+      dropTargetColId: "",
+      dropPosition: "before"
+    };
+    if (activeColumnReorder.handleEl && typeof activeColumnReorder.handleEl.setPointerCapture === "function") {
+      activeColumnReorder.handleEl.setPointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function onColumnReorderPointerMove(event) {
+    if (!activeColumnReorder || event.pointerId !== activeColumnReorder.pointerId) return;
+    const deltaX = event.clientX - activeColumnReorder.startX;
+    if (!activeColumnReorder.started && Math.abs(deltaX) < 6) return;
+    activeColumnReorder.started = true;
+    suppressSortUntil = Date.now() + 250;
+    document.body.classList.add("is-column-reordering");
+    const dropTarget = getDropTargetFromPointer(event.clientX, activeColumnReorder.sourceColId);
+    if (!dropTarget) {
+      clearColumnDropIndicators();
+      activeColumnReorder.dropTargetColId = "";
+      event.preventDefault();
+      return;
+    }
+    activeColumnReorder.dropTargetColId = dropTarget.targetColId;
+    activeColumnReorder.dropPosition = dropTarget.position;
+    markColumnDropTarget(activeColumnReorder.sourceColId, dropTarget.targetColId, dropTarget.position);
+    event.preventDefault();
+  }
+
+  async function finishColumnReorder(event) {
+    if (!activeColumnReorder || (event && event.pointerId !== activeColumnReorder.pointerId)) return;
+    const reorderState = activeColumnReorder;
+    activeColumnReorder = null;
+    if (reorderState.handleEl && typeof reorderState.handleEl.releasePointerCapture === "function") {
+      try {
+        reorderState.handleEl.releasePointerCapture(reorderState.pointerId);
+      } catch (_error) {
+        // Ignore pointer capture release failures.
+      }
+    }
+    document.body.classList.remove("is-column-reordering");
+    clearColumnDropIndicators();
+    if (!reorderState.started || !reorderState.dropTargetColId) return;
+
+    const normalizedOrder = App.normalizeColumnOrder(state.settings.columnOrder, state.currentColumns);
+    const targetIndex = normalizedOrder.indexOf(reorderState.dropTargetColId);
+    if (targetIndex < 0) return;
+    const insertedOrder = [...normalizedOrder];
+    const sourceIndex = insertedOrder.indexOf(reorderState.sourceColId);
+    if (sourceIndex < 0) return;
+    const [moved] = insertedOrder.splice(sourceIndex, 1);
+    const nextTargetIndex = insertedOrder.indexOf(reorderState.dropTargetColId);
+    const insertIndex = reorderState.dropPosition === "before" ? nextTargetIndex : nextTargetIndex + 1;
+    insertedOrder.splice(insertIndex, 0, moved);
+    state.settings.columnOrder = insertedOrder;
+    if (typeof App.persistSyncSettings === "function") {
+      try {
+        await App.persistSyncSettings(state.settings);
+      } catch (_error) {
+        App.setStatus("Could not save column order.");
+      }
+    }
+    App.renderContacts();
+  }
+
+  function bindColumnReorderHandles() {
+    if (!dom.listEl) return;
+    dom.listEl.querySelectorAll("[data-column-reorder-handle]").forEach((handle) => {
+      handle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      handle.addEventListener("pointerdown", (event) => {
+        const target = event.currentTarget;
+        if (!(target instanceof HTMLElement)) return;
+        const colId = String(target.getAttribute("data-col-id") || "").trim();
+        if (!colId) return;
+        beginColumnReorder(event, colId);
+      });
+    });
+  }
+
   function renderContacts() {
     dom.listEl.innerHTML = "";
     updateRecordIdColumnWarning(state.currentColumns);
@@ -244,12 +370,12 @@
             : "col-fixed"
           : "col-fluid";
         const customWidthClass = getCustomWidthClass(col);
-        const styleAttr = getColumnStyleAttr(col);
-
         const displayLabel = formatColumnLabel(col);
         return `<th class='sortable resizable ${App.columnClasses(col)} ${sizeClass} ${customWidthClass}' data-col-id='${App.escapeHtml(
           col.id
-        )}' data-sort-field='${App.escapeHtml(col.id)}' tabindex='0' aria-sort='${App.sortAria(col.id)}'${styleAttr}><span class='th-inner'><span class='th-label'>${App.escapeHtml(
+        )}' data-sort-field='${App.escapeHtml(col.id)}' tabindex='0' aria-sort='${App.sortAria(col.id)}'><span class='th-inner'><button type='button' class='col-reorder-handle' data-column-reorder-handle='true' data-col-id='${App.escapeHtml(
+          col.id
+        )}' aria-label='Reorder column' title='Drag to reorder column'><span aria-hidden='true'>::</span></button><span class='th-label'>${App.escapeHtml(
           displayLabel
         )}${App.sortIndicator(col.id)}</span><span class='col-resize-handle' data-column-resize-handle='true' data-col-id='${App.escapeHtml(
           col.id
@@ -279,7 +405,6 @@
               : "col-fluid";
             const customWidthClass = getCustomWidthClass(col);
             const css = `${App.columnClasses(col)} ${sizeClass} ${customWidthClass}`.trim();
-            const styleAttr = getColumnStyleAttr(col);
 
             if (col.id === state.phoneColumnId) {
               const phoneText = String(contact.values?.[col.id] || "").trim();
@@ -298,7 +423,7 @@
                   )}</button>`
                 : `<span class='phone-value'>${App.escapeHtml(value)}</span>`;
 
-              return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}><span class='phone-cell-wrap'>${phoneContent}${copyButton}</span></td>`;
+              return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'><span class='phone-cell-wrap'>${phoneContent}${copyButton}</span></td>`;
             }
 
             if (App.columnType(col) === "name") {
@@ -334,16 +459,16 @@
                 </span>
               `;
               if (contactUrl) {
-                return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}><span class='name-cell-wrap'>${actionsHtml}<a href='${App.escapeHtml(
+                return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'><span class='name-cell-wrap'>${actionsHtml}<a href='${App.escapeHtml(
                   contactUrl
                 )}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></span></td>`;
               }
-              return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}><span class='name-cell-wrap'>${actionsHtml}<button type='button' class='name-link-btn row-missing-record-id-link' data-key='${App.escapeHtml(
+              return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'><span class='name-cell-wrap'>${actionsHtml}<button type='button' class='name-link-btn row-missing-record-id-link' data-key='${App.escapeHtml(
                 key
               )}'>${App.escapeHtml(value)}</button></span></td>`;
             }
 
-            return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}>${App.escapeHtml(value)}</td>`;
+            return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'>${App.escapeHtml(value)}</td>`;
           })
           .join("");
 
@@ -399,6 +524,7 @@
     });
 
     bindColumnResizeHandles();
+    bindColumnReorderHandles();
 
     dom.listEl.querySelectorAll(".row-select").forEach((input) => {
       input.addEventListener("change", () => {
@@ -595,8 +721,11 @@
   document.addEventListener("pointermove", onColumnResizePointerMove);
   document.addEventListener("pointerup", (event) => {
     void finishColumnResize(event);
+    void finishColumnReorder(event);
   });
   document.addEventListener("pointercancel", (event) => {
     void finishColumnResize(event);
+    void finishColumnReorder(event);
   });
+  document.addEventListener("pointermove", onColumnReorderPointerMove);
 })();

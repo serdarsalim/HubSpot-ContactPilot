@@ -444,15 +444,43 @@
 
       th.resizable {
         position: sticky;
+        padding-left: 30px;
         padding-right: 18px;
       }
 
       .th-inner {
         display: flex;
         align-items: center;
-        gap: 6px;
         width: 100%;
         min-width: 0;
+      }
+
+      .col-reorder-handle {
+        position: absolute;
+        top: 50%;
+        left: 10px;
+        transform: translateY(-50%);
+        border: 0;
+        background: transparent;
+        color: #6c8197;
+        padding: 0;
+        margin: 0;
+        cursor: grab;
+        font: inherit;
+        font-weight: 700;
+        letter-spacing: -1px;
+        line-height: 1;
+        z-index: 2;
+      }
+
+      .col-reorder-handle:hover {
+        color: #24476d;
+      }
+
+      .col-reorder-handle:focus-visible {
+        outline: 2px solid #0b66c3;
+        outline-offset: 2px;
+        border-radius: 4px;
       }
 
       .th-label {
@@ -508,10 +536,34 @@
         max-width: none !important;
       }
 
+      th.drop-before,
+      td.drop-before {
+        box-shadow: inset 2px 0 0 #0b66c3;
+      }
+
+      th.drop-after,
+      td.drop-after {
+        box-shadow: inset -2px 0 0 #0b66c3;
+      }
+
+      th.is-reordering,
+      td.is-reordering {
+        background: #f4f9ff;
+      }
+
       body.is-column-resizing,
       body.is-column-resizing * {
         cursor: col-resize !important;
         user-select: none;
+      }
+
+      body.is-column-reordering,
+      body.is-column-reordering * {
+        user-select: none;
+      }
+
+      body.is-column-reordering .col-reorder-handle {
+        cursor: grabbing !important;
       }
 
       th.sortable:focus-visible {

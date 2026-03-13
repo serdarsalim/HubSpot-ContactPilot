@@ -215,6 +215,7 @@
     inlineQuickActionsEnabled: true,
     visibleColumns: {},
     columnWidths: {},
+    columnOrder: [],
     emailTemplates: [DEFAULT_EMAIL_TEMPLATE],
     whatsappTemplates: [DEFAULT_WHATSAPP_TEMPLATE],
     noteTemplates: [DEFAULT_NOTE_TEMPLATE]
@@ -299,6 +300,32 @@
       if (!colId || !Number.isFinite(width)) return;
       normalized[colId] = Math.max(COLUMN_RESIZE_MIN_WIDTH, Math.min(COLUMN_RESIZE_MAX_WIDTH, Math.round(width)));
     });
+    return normalized;
+  }
+
+  function normalizeColumnOrder(rawColumnOrder, columnsInput = state.currentColumns) {
+    const source = Array.isArray(rawColumnOrder) ? rawColumnOrder : [];
+    const columns = Array.isArray(columnsInput) ? columnsInput : [];
+    const currentIds = columns
+      .map((col) => String(col?.id || "").trim())
+      .filter((id) => id.length > 0);
+    const currentIdSet = new Set(currentIds);
+    const normalized = [];
+    const seen = new Set();
+
+    source.forEach((value) => {
+      const colId = String(value || "").trim();
+      if (!colId || seen.has(colId) || !currentIdSet.has(colId)) return;
+      seen.add(colId);
+      normalized.push(colId);
+    });
+
+    currentIds.forEach((colId) => {
+      if (seen.has(colId)) return;
+      seen.add(colId);
+      normalized.push(colId);
+    });
+
     return normalized;
   }
 
@@ -679,7 +706,11 @@
   }
 
   function getVisibleColumns() {
-    return state.currentColumns.filter((col) => state.settings.visibleColumns[col.id] !== false);
+    const columnsById = new Map(state.currentColumns.map((col) => [col.id, col]));
+    const orderedIds = normalizeColumnOrder(state.settings.columnOrder, state.currentColumns);
+    return orderedIds
+      .map((colId) => columnsById.get(colId))
+      .filter((col) => col && state.settings.visibleColumns[col.id] !== false);
   }
 
   function isNameColumn(col) {
@@ -714,12 +745,22 @@
           changed = true;
         }
       }
+      const normalizedOrder = normalizeColumnOrder(state.settings.columnOrder, state.currentColumns);
+      if (normalizedOrder.join("|") !== (Array.isArray(state.settings.columnOrder) ? state.settings.columnOrder.join("|") : "")) {
+        state.settings.columnOrder = normalizedOrder;
+        changed = true;
+      }
       return changed;
     }
 
     for (const col of state.currentColumns) {
       if (typeof state.settings.visibleColumns[col.id] === "boolean") continue;
       state.settings.visibleColumns[col.id] = true;
+      changed = true;
+    }
+    const normalizedOrder = normalizeColumnOrder(state.settings.columnOrder, state.currentColumns);
+    if (normalizedOrder.join("|") !== (Array.isArray(state.settings.columnOrder) ? state.settings.columnOrder.join("|") : "")) {
+      state.settings.columnOrder = normalizedOrder;
       changed = true;
     }
     return changed;
@@ -1280,6 +1321,7 @@
     columnType,
     columnClasses,
     normalizeColumnWidths,
+    normalizeColumnOrder,
     getColumnWidth,
     setColumnWidth,
     sortAria,
