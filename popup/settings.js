@@ -892,7 +892,8 @@
       inlineQuickActionsEnabled: dom.inlineQuickActionsEnabledInput
         ? dom.inlineQuickActionsEnabledInput.checked
         : true,
-      visibleColumns
+      visibleColumns,
+      columnWidths: App.normalizeColumnWidths(state.settings.columnWidths)
     };
   }
 
@@ -1948,6 +1949,7 @@
         ...constants.DEFAULT_SETTINGS.visibleColumns,
         ...(savedWithoutLegacy.visibleColumns || {})
       },
+      columnWidths: App.normalizeColumnWidths(savedWithoutLegacy.columnWidths),
       emailTemplates,
       whatsappTemplates,
       noteTemplates

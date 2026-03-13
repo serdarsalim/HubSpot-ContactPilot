@@ -1,6 +1,8 @@
 (() => {
   const App = window.PopupApp;
   const { dom, state } = App;
+  let activeColumnResize = null;
+  let suppressSortUntil = 0;
 
   function updateRecordIdColumnWarning(columns = state.currentColumns) {
     if (typeof App.setStatusWarning !== "function") return;
@@ -95,6 +97,108 @@
     return value.replace(/\s+(?:GMT|UTC)\s*[+-]?\s*\d{1,2}(?::?\d{2})?\s*$/i, "").trim() || "-";
   }
 
+  function getColumnStyleAttr(col) {
+    const width = App.getColumnWidth(col?.id);
+    if (!width) return "";
+    return ` style='width:${width}px;min-width:${width}px;max-width:${width}px;'`;
+  }
+
+  function getCustomWidthClass(col) {
+    return App.getColumnWidth(col?.id) ? "has-custom-width" : "";
+  }
+
+  function applyColumnWidthToDom(colIdInput, widthInput) {
+    const colId = String(colIdInput || "").trim();
+    const width = Number(widthInput);
+    if (!colId || !Number.isFinite(width) || !dom.listEl) return;
+    const nextWidth = `${Math.round(width)}px`;
+    const escapedColId = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(colId) : colId.replace(/["\\]/g, "\\$&");
+    dom.listEl.querySelectorAll(`col[data-col-id="${escapedColId}"]`).forEach((column) => {
+      if (!(column instanceof HTMLElement)) return;
+      column.style.width = nextWidth;
+      column.style.minWidth = nextWidth;
+      column.style.maxWidth = nextWidth;
+    });
+    dom.listEl.querySelectorAll(`[data-col-id="${escapedColId}"]`).forEach((cell) => {
+      if (!(cell instanceof HTMLElement)) return;
+      cell.style.width = nextWidth;
+      cell.style.minWidth = nextWidth;
+      cell.style.maxWidth = nextWidth;
+    });
+  }
+
+  function beginColumnResize(event, col) {
+    if (!(event instanceof PointerEvent)) return;
+    if (!col?.id || !dom.listEl) return;
+    const th = event.currentTarget?.closest("th");
+    if (!(th instanceof HTMLElement)) return;
+    const startWidth = App.getColumnWidth(col.id) || Math.round(th.getBoundingClientRect().width);
+    activeColumnResize = {
+      colId: col.id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth,
+      moved: false,
+      handleEl: event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+    };
+    if (activeColumnResize.handleEl && typeof activeColumnResize.handleEl.setPointerCapture === "function") {
+      activeColumnResize.handleEl.setPointerCapture(event.pointerId);
+    }
+    document.body.classList.add("is-column-resizing");
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function onColumnResizePointerMove(event) {
+    if (!activeColumnResize || event.pointerId !== activeColumnResize.pointerId) return;
+    const deltaX = event.clientX - activeColumnResize.startX;
+    const nextWidth = App.setColumnWidth(activeColumnResize.colId, activeColumnResize.startWidth + deltaX);
+    if (!nextWidth) return;
+    activeColumnResize.moved = activeColumnResize.moved || Math.abs(deltaX) >= 3;
+    applyColumnWidthToDom(activeColumnResize.colId, nextWidth);
+    event.preventDefault();
+  }
+
+  async function finishColumnResize(event) {
+    if (!activeColumnResize || (event && event.pointerId !== activeColumnResize.pointerId)) return;
+    const resizeState = activeColumnResize;
+    activeColumnResize = null;
+    if (resizeState.handleEl && typeof resizeState.handleEl.releasePointerCapture === "function") {
+      try {
+        resizeState.handleEl.releasePointerCapture(resizeState.pointerId);
+      } catch (_error) {
+        // Ignore pointer capture release failures.
+      }
+    }
+    document.body.classList.remove("is-column-resizing");
+    if (!resizeState.moved) return;
+    suppressSortUntil = Date.now() + 250;
+    if (typeof App.persistSyncSettings !== "function") return;
+    try {
+      await App.persistSyncSettings(state.settings);
+    } catch (_error) {
+      App.setStatus("Could not save column width.");
+    }
+  }
+
+  function bindColumnResizeHandles() {
+    if (!dom.listEl) return;
+    dom.listEl.querySelectorAll("[data-column-resize-handle]").forEach((handle) => {
+      handle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      handle.addEventListener("pointerdown", (event) => {
+        const target = event.currentTarget;
+        if (!(target instanceof HTMLElement)) return;
+        const colId = String(target.getAttribute("data-col-id") || "").trim();
+        const col = state.currentColumns.find((item) => item.id === colId);
+        if (!col) return;
+        beginColumnResize(event, col);
+      });
+    });
+  }
+
   function renderContacts() {
     dom.listEl.innerHTML = "";
     updateRecordIdColumnWarning(state.currentColumns);
@@ -139,10 +243,22 @@
             ? "col-elastic"
             : "col-fixed"
           : "col-fluid";
+        const customWidthClass = getCustomWidthClass(col);
+        const styleAttr = getColumnStyleAttr(col);
 
         const displayLabel = formatColumnLabel(col);
-        return `<th class='sortable ${App.columnClasses(col)} ${sizeClass}' data-sort-field='${App.escapeHtml(col.id)}' tabindex='0' aria-sort='${App.sortAria(col.id)}'>${App.escapeHtml(displayLabel)}${App.sortIndicator(col.id)}</th>`;
+        return `<th class='sortable resizable ${App.columnClasses(col)} ${sizeClass} ${customWidthClass}' data-col-id='${App.escapeHtml(
+          col.id
+        )}' data-sort-field='${App.escapeHtml(col.id)}' tabindex='0' aria-sort='${App.sortAria(col.id)}'${styleAttr}><span class='th-inner'><span class='th-label'>${App.escapeHtml(
+          displayLabel
+        )}${App.sortIndicator(col.id)}</span><span class='col-resize-handle' data-column-resize-handle='true' data-col-id='${App.escapeHtml(
+          col.id
+        )}' role='presentation' aria-hidden='true'></span></span></th>`;
       })
+      .join("");
+
+    const colgroupHtml = visibleColumns
+      .map((col) => `<col data-col-id='${App.escapeHtml(col.id)}'${getColumnStyleAttr(col)} />`)
       .join("");
 
     const rowsHtml = state.displayedContacts
@@ -161,7 +277,9 @@
                 ? "col-elastic"
                 : "col-fixed"
               : "col-fluid";
-            const css = `${App.columnClasses(col)} ${sizeClass}`;
+            const customWidthClass = getCustomWidthClass(col);
+            const css = `${App.columnClasses(col)} ${sizeClass} ${customWidthClass}`.trim();
+            const styleAttr = getColumnStyleAttr(col);
 
             if (col.id === state.phoneColumnId) {
               const phoneText = String(contact.values?.[col.id] || "").trim();
@@ -180,7 +298,7 @@
                   )}</button>`
                 : `<span class='phone-value'>${App.escapeHtml(value)}</span>`;
 
-              return `<td class='${css}'><span class='phone-cell-wrap'>${phoneContent}${copyButton}</span></td>`;
+              return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}><span class='phone-cell-wrap'>${phoneContent}${copyButton}</span></td>`;
             }
 
             if (App.columnType(col) === "name") {
@@ -216,12 +334,16 @@
                 </span>
               `;
               if (contactUrl) {
-                return `<td class='${css}'><span class='name-cell-wrap'>${actionsHtml}<a href='${App.escapeHtml(contactUrl)}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></span></td>`;
+                return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}><span class='name-cell-wrap'>${actionsHtml}<a href='${App.escapeHtml(
+                  contactUrl
+                )}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></span></td>`;
               }
-              return `<td class='${css}'><span class='name-cell-wrap'>${actionsHtml}<button type='button' class='name-link-btn row-missing-record-id-link' data-key='${App.escapeHtml(key)}'>${App.escapeHtml(value)}</button></span></td>`;
+              return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}><span class='name-cell-wrap'>${actionsHtml}<button type='button' class='name-link-btn row-missing-record-id-link' data-key='${App.escapeHtml(
+                key
+              )}'>${App.escapeHtml(value)}</button></span></td>`;
             }
 
-            return `<td class='${css}'>${App.escapeHtml(value)}</td>`;
+            return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'${styleAttr}>${App.escapeHtml(value)}</td>`;
           })
           .join("");
 
@@ -245,6 +367,11 @@
 
     dom.listEl.innerHTML = `
     <table>
+      <colgroup>
+        <col class='sel-col' />
+        ${colgroupHtml}
+        <col class='actions-col' />
+      </colgroup>
       <thead>
         <tr>
           <th class='sel'><input type='checkbox' id='selectAllShown' ${allShownSelected ? "checked" : ""} /></th>
@@ -258,16 +385,20 @@
 
     dom.listEl.querySelectorAll("th.sortable").forEach((header) => {
       header.addEventListener("click", () => {
+        if (Date.now() < suppressSortUntil) return;
         const field = header.getAttribute("data-sort-field");
         App.toggleSort(field);
       });
       header.addEventListener("keydown", (event) => {
+        if (Date.now() < suppressSortUntil) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         const field = header.getAttribute("data-sort-field");
         App.toggleSort(field);
       });
     });
+
+    bindColumnResizeHandles();
 
     dom.listEl.querySelectorAll(".row-select").forEach((input) => {
       input.addEventListener("change", () => {
@@ -459,5 +590,13 @@
   Object.assign(App, {
     renderContacts,
     loadContacts
+  });
+
+  document.addEventListener("pointermove", onColumnResizePointerMove);
+  document.addEventListener("pointerup", (event) => {
+    void finishColumnResize(event);
+  });
+  document.addEventListener("pointercancel", (event) => {
+    void finishColumnResize(event);
   });
 })();

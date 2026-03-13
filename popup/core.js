@@ -203,6 +203,8 @@
     name: "Template 1",
     body: ""
   };
+  const COLUMN_RESIZE_MIN_WIDTH = 80;
+  const COLUMN_RESIZE_MAX_WIDTH = 420;
   const DEFAULT_SETTINGS = {
     themeMode: "light",
     defaultLaunchMode: "attached",
@@ -212,6 +214,7 @@
     rowFilterWord: "",
     inlineQuickActionsEnabled: true,
     visibleColumns: {},
+    columnWidths: {},
     emailTemplates: [DEFAULT_EMAIL_TEMPLATE],
     whatsappTemplates: [DEFAULT_WHATSAPP_TEMPLATE],
     noteTemplates: [DEFAULT_NOTE_TEMPLATE]
@@ -285,6 +288,38 @@
   function columnClasses(col) {
     const type = columnType(col);
     return type === "plain" ? "plain" : `plain ${type}`;
+  }
+
+  function normalizeColumnWidths(rawColumnWidths) {
+    const source = rawColumnWidths && typeof rawColumnWidths === "object" ? rawColumnWidths : {};
+    const normalized = {};
+    Object.entries(source).forEach(([key, value]) => {
+      const colId = String(key || "").trim();
+      const width = Number(value);
+      if (!colId || !Number.isFinite(width)) return;
+      normalized[colId] = Math.max(COLUMN_RESIZE_MIN_WIDTH, Math.min(COLUMN_RESIZE_MAX_WIDTH, Math.round(width)));
+    });
+    return normalized;
+  }
+
+  function getColumnWidth(colIdInput) {
+    const colId = String(colIdInput || "").trim();
+    if (!colId) return null;
+    const width = Number(state.settings?.columnWidths?.[colId]);
+    if (!Number.isFinite(width)) return null;
+    return Math.max(COLUMN_RESIZE_MIN_WIDTH, Math.min(COLUMN_RESIZE_MAX_WIDTH, Math.round(width)));
+  }
+
+  function setColumnWidth(colIdInput, widthInput) {
+    const colId = String(colIdInput || "").trim();
+    const width = Number(widthInput);
+    if (!colId || !Number.isFinite(width)) return null;
+    const nextWidth = Math.max(COLUMN_RESIZE_MIN_WIDTH, Math.min(COLUMN_RESIZE_MAX_WIDTH, Math.round(width)));
+    state.settings.columnWidths = normalizeColumnWidths({
+      ...(state.settings?.columnWidths || {}),
+      [colId]: nextWidth
+    });
+    return nextWidth;
   }
 
   function sortAria(field) {
@@ -1233,6 +1268,8 @@
     DEFAULT_EMAIL_TEMPLATE,
     DEFAULT_WHATSAPP_TEMPLATE,
     DEFAULT_NOTE_TEMPLATE,
+    COLUMN_RESIZE_MIN_WIDTH,
+    COLUMN_RESIZE_MAX_WIDTH,
     DEFAULT_SETTINGS
   };
   App.messageTypes = MESSAGE_TYPES;
@@ -1242,6 +1279,9 @@
   Object.assign(App, {
     columnType,
     columnClasses,
+    normalizeColumnWidths,
+    getColumnWidth,
+    setColumnWidth,
     sortAria,
     toggleSort,
     escapeHtml,
