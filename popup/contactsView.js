@@ -108,6 +108,25 @@
     return App.getColumnWidth(col?.id) ? "has-custom-width" : "";
   }
 
+  function getBaseColumnWidth(col, isLastVisibleColumn) {
+    const customWidth = App.getColumnWidth(col?.id);
+    if (customWidth) return customWidth;
+    if (col?.id === state.phoneColumnId) return 190;
+    if (isLastVisibleColumn) return 140;
+    return 250;
+  }
+
+  function getTableWidthPx(visibleColumns) {
+    const columns = Array.isArray(visibleColumns) ? visibleColumns : [];
+    const selectionWidth = 28;
+    const quickNotesWidth = 340;
+    const dataColumnsWidth = columns.reduce((total, col, index) => {
+      const isLastVisibleColumn = index === columns.length - 1;
+      return total + getBaseColumnWidth(col, isLastVisibleColumn);
+    }, 0);
+    return selectionWidth + quickNotesWidth + dataColumnsWidth;
+  }
+
   function applyColumnWidthToDom(colIdInput, widthInput) {
     const colId = String(colIdInput || "").trim();
     const width = Number(widthInput);
@@ -386,6 +405,7 @@
     const colgroupHtml = visibleColumns
       .map((col) => `<col data-col-id='${App.escapeHtml(col.id)}'${getColumnStyleAttr(col)} />`)
       .join("");
+    const tableWidthPx = getTableWidthPx(visibleColumns);
 
     const rowsHtml = state.displayedContacts
       .map((contact) => {
@@ -491,7 +511,7 @@
       .join("");
 
     dom.listEl.innerHTML = `
-    <table>
+    <table style='width:max(100%, ${tableWidthPx}px);'>
       <colgroup>
         <col class='sel-col' />
         ${colgroupHtml}
