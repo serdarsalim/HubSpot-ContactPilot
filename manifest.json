@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Contact Point",
   "version": "2026.3.12",
-  "description": "Contact workflow sidecar with WhatsApp links, notes, and email templates.",
+  "description": "HubSpot contact workflow extension for WhatsApp, notes, and email templates.",
   "permissions": [
     "storage",
     "tabs"
