@@ -38,6 +38,7 @@
   const INLINE_QUICK_ACTIONS_STYLE_ID = "cpInlineQuickActionsStyle";
   const INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY = "popupInlineQuickActionsPosition";
   const INLINE_QUICK_ACTIONS_CHECK_INTERVAL_MS = 900;
+  const CONTACT_INDEX_NEW_TAB_STYLE_ID = "cpContactIndexNewTabStyle";
   const DARK_READER_THEME = Object.freeze({
     brightness: 100,
     contrast: 90,
@@ -561,6 +562,194 @@
     if (objectTypeId === "2") return "company";
     if (objectTypeId === "3") return "deal";
     return "record";
+  }
+
+  function isContactIndexPage() {
+    const path = String(location.pathname || "");
+    if (!/\/contacts\/\d+\//i.test(path)) return false;
+    if (/\/record\/0-1\/\d+/i.test(path)) return false;
+    return /\/objects\/0-1(?:\/|$)/i.test(path);
+  }
+
+  function isContactIndexRecordLink(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) return false;
+    const href = String(anchor.href || anchor.getAttribute("href") || "").trim();
+    if (!extractContactRecordIdFromHref(href)) return false;
+
+    const row = anchor.closest("tr, [role='row'], li, article, section, div");
+    if (!(row instanceof Element)) return false;
+    return !!extractRecordIdFromRow(row);
+  }
+
+  function ensureContactIndexNewTabStyles() {
+    if (document.getElementById(CONTACT_INDEX_NEW_TAB_STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = CONTACT_INDEX_NEW_TAB_STYLE_ID;
+    style.textContent = `
+      .cp-contact-index-avatar-action {
+        position: relative;
+        cursor: pointer;
+      }
+
+      .cp-contact-index-avatar-action::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 28px;
+        height: 28px;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+        opacity: 0;
+        pointer-events: none;
+        background-color: #e6f5fa;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 12px 12px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M6 3.5H3.75A1.25 1.25 0 0 0 2.5 4.75v7.5A1.25 1.25 0 0 0 3.75 13.5h7.5a1.25 1.25 0 0 0 1.25-1.25V10' stroke='%2333475b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M8.5 2.5h5v5' stroke='%2333475b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M13.25 2.75 7 9' stroke='%2333475b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        box-shadow: 0 0 0 1px rgba(45, 62, 80, 0.08);
+        transition: opacity 120ms ease;
+      }
+
+      tr:hover .cp-contact-index-avatar-action,
+      [role='row']:hover .cp-contact-index-avatar-action,
+      .cp-contact-index-avatar-action:focus-visible {
+        color: transparent !important;
+        font-size: 0 !important;
+        text-shadow: none !important;
+      }
+
+      tr:hover .cp-contact-index-avatar-action::after,
+      [role='row']:hover .cp-contact-index-avatar-action::after,
+      .cp-contact-index-avatar-action:focus-visible::after {
+        opacity: 1;
+      }
+
+      .cp-contact-index-avatar-action:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(11, 114, 133, 0.18);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function openContactIndexLinkInNewTab(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    const href = String(anchor.href || anchor.getAttribute("href") || "").trim();
+    if (!href) return;
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
+  function findContactIndexAnchorInScope(scope) {
+    if (!(scope instanceof Element)) return null;
+    const anchors = scope instanceof HTMLAnchorElement ? [scope, ...scope.querySelectorAll("a[href]")] : Array.from(scope.querySelectorAll("a[href]"));
+    for (const anchor of anchors) {
+      if (anchor instanceof HTMLAnchorElement && isContactIndexRecordLink(anchor)) {
+        return anchor;
+      }
+    }
+    return null;
+  }
+
+  function findContactIndexNameCell(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) return null;
+    return anchor.closest("td, [role='gridcell'], [role='cell']") || anchor.parentElement;
+  }
+
+  function isLikelyContactIndexAvatarNode(element) {
+    if (!(element instanceof Element)) return false;
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 20 || rect.width > 64 || rect.height > 64) return false;
+    const text = cleanText(element.textContent || "");
+    if (!text || text.length > 4) return false;
+    return true;
+  }
+
+  function findContactIndexInlineContainer(anchor, nameCell) {
+    const cell = nameCell instanceof Element ? nameCell : findContactIndexNameCell(anchor);
+    if (!(cell instanceof Element) || !(anchor instanceof HTMLAnchorElement)) return cell;
+
+    let current = anchor.parentElement;
+    while (current && current !== cell) {
+      const children = Array.from(current.children);
+      const anchorChild = children.find((child) => child === anchor || child.contains(anchor));
+      if (anchorChild && children.length >= 2) {
+        const avatarSibling = children.find((child) => child !== anchorChild && isLikelyContactIndexAvatarNode(child));
+        if (avatarSibling) return current;
+      }
+      current = current.parentElement;
+    }
+
+    return cell;
+  }
+
+  function findContactIndexAvatarNode(container, anchor) {
+    if (!(container instanceof Element) || !(anchor instanceof HTMLAnchorElement)) return null;
+    const children = Array.from(container.children);
+    const anchorChild = children.find((child) => child === anchor || child.contains(anchor)) || anchor;
+    return children.find((child) => child !== anchorChild && isLikelyContactIndexAvatarNode(child)) || null;
+  }
+
+  function decorateContactIndexAnchor(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    if (anchor.dataset.cpInlineNewTabEnhanced === "1") return;
+    if (!isContactIndexRecordLink(anchor)) return;
+
+    const nameCell = findContactIndexNameCell(anchor);
+    if (!(nameCell instanceof Element)) return;
+
+    const existingInCell = nameCell.querySelector(".cp-contact-index-inline-open-btn");
+    if (existingInCell instanceof HTMLButtonElement) {
+      anchor.dataset.cpInlineNewTabEnhanced = "1";
+      return;
+    }
+
+    const container = findContactIndexInlineContainer(anchor, nameCell);
+    if (!(container instanceof Element)) return;
+
+    const avatarNode = findContactIndexAvatarNode(container, anchor);
+    if (avatarNode instanceof Element) {
+      avatarNode.classList.add("cp-contact-index-avatar-action");
+      avatarNode.setAttribute("role", "button");
+      avatarNode.setAttribute("tabindex", "0");
+      avatarNode.setAttribute("aria-label", "Open contact in new tab");
+      avatarNode.setAttribute("title", "Open in new tab");
+      avatarNode.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openContactIndexLinkInNewTab(anchor);
+      });
+      avatarNode.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        openContactIndexLinkInNewTab(anchor);
+      });
+      anchor.dataset.cpInlineNewTabEnhanced = "1";
+    }
+  }
+
+  function enhanceContactIndexInlineButtons() {
+    if (!isContactIndexPage()) return;
+    ensureContactIndexNewTabStyles();
+    const anchors = Array.from(document.querySelectorAll("a[href]"));
+    for (const anchor of anchors) {
+      decorateContactIndexAnchor(anchor);
+    }
+  }
+
+  function startContactIndexEnhancerWatcher() {
+    ensureContactIndexNewTabStyles();
+    enhanceContactIndexInlineButtons();
+    if (!document.body) return;
+    const observer = new MutationObserver(() => {
+      enhanceContactIndexInlineButtons();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 
   function findActiveContactName() {
@@ -3149,6 +3338,7 @@
 
   applyHubSpotThemeFromSettingsStorage();
   subscribeHubSpotThemeChanges();
+  startContactIndexEnhancerWatcher();
   startInlineQuickActionsWatcher();
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
