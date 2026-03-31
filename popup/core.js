@@ -569,6 +569,20 @@
       .replace(/^_+|_+$/g, "");
   }
 
+  function normalizeSearchText(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(/[İIı]/g, "i")
+      .replace(/[Şş]/g, "s")
+      .replace(/[Çç]/g, "c")
+      .replace(/[Ğğ]/g, "g")
+      .replace(/[Üü]/g, "u")
+      .replace(/[Öö]/g, "o")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
   function applyTokens(text, tokens) {
     return String(text || "").replace(/\[([a-z0-9_]+)\]/gi, (_match, tokenName) => {
       const key = templateTokenKey(tokenName);
@@ -1373,6 +1387,7 @@
     getMergedWhatsappTemplates,
     getMergedNoteTemplates,
     templateTokenKey,
+    normalizeSearchText,
     applyTokens,
     normalizeThemeMode,
     normalizeLaunchMode,

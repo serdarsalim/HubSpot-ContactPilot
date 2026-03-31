@@ -155,6 +155,20 @@
     return (text || "").replace(/\s+/g, " ").trim();
   }
 
+  function normalizeSearchText(text) {
+    return String(text || "")
+      .normalize("NFKD")
+      .replace(/[İIı]/g, "i")
+      .replace(/[Şş]/g, "s")
+      .replace(/[Çç]/g, "c")
+      .replace(/[Ğğ]/g, "g")
+      .replace(/[Üü]/g, "u")
+      .replace(/[Öö]/g, "o")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
   function isDashLikePlaceholder(value) {
     const text = cleanText(value);
     if (!text) return false;
@@ -2209,6 +2223,7 @@
     countryPrefix: DEFAULT_COUNTRY_CODE,
     position: null,
     busy: false,
+    searchQuery: "",
     lastUrl: "",
     watcherTimerId: 0,
     dragging: {
@@ -2881,6 +2896,28 @@
         background: rgba(128, 92, 173, 0.66);
       }
 
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search {
+        padding: 8px 8px 4px;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input {
+        width: 100%;
+        border: 1px solid rgba(123, 99, 161, 0.26);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #402866;
+        font: inherit;
+        font-size: 12px;
+        line-height: 1.3;
+        padding: 7px 9px;
+        outline: none;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input:focus {
+        border-color: rgba(123, 99, 161, 0.48);
+        box-shadow: 0 0 0 3px rgba(137, 96, 196, 0.12);
+      }
+
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn {
         display: flex;
         align-items: center;
@@ -2995,6 +3032,17 @@
         scrollbar-color: rgba(198, 173, 232, 0.42) transparent;
       }
 
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input {
+        background: rgba(43, 31, 63, 0.92) !important;
+        border-color: rgba(198, 173, 232, 0.26) !important;
+        color: #f2ecfb !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input:focus {
+        border-color: rgba(198, 173, 232, 0.46) !important;
+        box-shadow: 0 0 0 3px rgba(179, 145, 226, 0.14) !important;
+      }
+
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-panel::-webkit-scrollbar-thumb {
         background: rgba(198, 173, 232, 0.42) !important;
       }
@@ -3073,14 +3121,29 @@
     }
 
     const templates = inlineQuickActionsState.templates?.[inlineQuickActionsState.activeKind] || [];
+    const query = normalizeSearchText(inlineQuickActionsState.searchQuery || "");
+    const matchingTemplates = query
+      ? templates.filter((template) => normalizeSearchText(template?.name || "").includes(query))
+      : templates;
     inlineQuickActionsState.panelEl.hidden = false;
     if (!templates.length) {
       const label = inlineQuickActionsState.activeKind === "whatsapp" ? "WhatsApp" : inlineQuickActionsState.activeKind[0].toUpperCase() + inlineQuickActionsState.activeKind.slice(1);
       inlineQuickActionsState.panelEl.innerHTML = `<div class='cp-inline-empty'>No ${escapeHtml(label)} templates.</div>`;
       return;
     }
+    if (!matchingTemplates.length) {
+      inlineQuickActionsState.panelEl.innerHTML =
+        `<div class='cp-inline-search'><input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
+          inlineQuickActionsState.searchQuery || ""
+        )}'></div>` + "<div class='cp-inline-empty'>No templates match that title.</div>";
+      return;
+    }
 
-    inlineQuickActionsState.panelEl.innerHTML = templates
+    inlineQuickActionsState.panelEl.innerHTML =
+      `<div class='cp-inline-search'><input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
+        inlineQuickActionsState.searchQuery || ""
+      )}'></div>` +
+      matchingTemplates
       .map((template) => {
         const isUsed = hasInlineTemplateBeenUsed(inlineQuickActionsState.activeKind, template.id);
         const isCloud = String(template?.source || "").toLowerCase() === "cloud";
@@ -3436,9 +3499,11 @@
     await refreshInlineQuickActionsData();
 
     if (inlineQuickActionsState.activeKind === selectedKind) {
+      inlineQuickActionsState.searchQuery = "";
       renderInlineQuickActionsPanel("");
       return;
     }
+    inlineQuickActionsState.searchQuery = "";
     renderInlineQuickActionsPanel(selectedKind);
   }
 
@@ -3459,6 +3524,25 @@
       const templateId = String(templateButton.getAttribute("data-template-id") || "");
       if (!kind || !templateId) return;
       void handleInlineTemplateSelection(kind, templateId);
+    }
+  }
+
+  function handleInlineRootInput(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.classList.contains("cp-inline-search-input")) return;
+
+    const nextQuery = String(target.value || "");
+    const caret = Number.isFinite(target.selectionStart) ? target.selectionStart : nextQuery.length;
+    inlineQuickActionsState.searchQuery = nextQuery;
+    if (inlineQuickActionsState.activeKind) {
+      renderInlineQuickActionsPanel(inlineQuickActionsState.activeKind);
+      const nextInput = inlineQuickActionsState.panelEl?.querySelector(".cp-inline-search-input");
+      if (nextInput instanceof HTMLInputElement) {
+        nextInput.focus();
+        const nextCaret = Math.min(caret, nextInput.value.length);
+        nextInput.setSelectionRange(nextCaret, nextCaret);
+      }
     }
   }
 
@@ -3559,6 +3643,7 @@
     `;
 
     rootEl.addEventListener("click", handleInlineRootClick);
+    rootEl.addEventListener("input", handleInlineRootInput);
     rootEl.addEventListener("pointerdown", handleInlineQuickActionsPointerDown);
     document.body.appendChild(rootEl);
     inlineQuickActionsState.rootEl = rootEl;
@@ -3572,12 +3657,14 @@
     if (!inlineQuickActionsState.rootEl) return;
     finishInlineQuickActionsDrag();
     inlineQuickActionsState.rootEl.removeEventListener("click", handleInlineRootClick);
+    inlineQuickActionsState.rootEl.removeEventListener("input", handleInlineRootInput);
     inlineQuickActionsState.rootEl.removeEventListener("pointerdown", handleInlineQuickActionsPointerDown);
     inlineQuickActionsState.rootEl.remove();
     inlineQuickActionsState.rootEl = null;
     inlineQuickActionsState.panelEl = null;
     inlineQuickActionsState.statusEl = null;
     inlineQuickActionsState.activeKind = "";
+    inlineQuickActionsState.searchQuery = "";
     inlineQuickActionsState.busy = false;
   }
 

@@ -665,13 +665,11 @@
   function renderEmailTemplatePickerOptions() {
     if (!dom.emailTemplatePickList) return;
     const templates = getMergedEmailTemplates();
-    const query = String(state.emailTemplatePickState?.query || "")
-      .trim()
-      .toLowerCase();
+    const query = App.normalizeSearchText(state.emailTemplatePickState?.query || "");
     const matchingTemplates = query
       ? templates.filter((template) => {
-          const name = String(template?.name || "").toLowerCase();
-          const subject = String(template?.subject || "").toLowerCase();
+          const name = App.normalizeSearchText(template?.name || "");
+          const subject = App.normalizeSearchText(template?.subject || "");
           return name.includes(query) || subject.includes(query);
         })
       : templates;

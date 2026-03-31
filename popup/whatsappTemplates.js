@@ -308,14 +308,11 @@
   function renderWhatsappTemplatePickerOptions() {
     if (!dom.whatsappTemplatePickList) return;
     const templates = getMergedWhatsappTemplates();
-    const query = String(state.whatsappTemplatePickState?.query || "")
-      .trim()
-      .toLowerCase();
+    const query = App.normalizeSearchText(state.whatsappTemplatePickState?.query || "");
     const matchingTemplates = query
       ? templates.filter((template) => {
-          const name = String(template?.name || "").toLowerCase();
-          const body = String(template?.body || "").toLowerCase();
-          return name.includes(query) || body.includes(query);
+          const name = App.normalizeSearchText(template?.name || "");
+          return name.includes(query);
         })
       : templates;
     if (!templates.length) {
