@@ -671,10 +671,13 @@
 
     try {
       const loadAll = !!options.loadAll;
-      const resolved = await App.findBestContactsTab({
-        countryPrefix: state.settings.countryPrefix,
-        messageText: state.settings.messageTemplate
-      });
+      const preferredTab = options.sourceTab && typeof options.sourceTab.id === "number" ? options.sourceTab : null;
+      const resolved = preferredTab
+        ? { tab: preferredTab, probeResponse: null }
+        : await App.findBestContactsTab({
+            countryPrefix: state.settings.countryPrefix,
+            messageText: state.settings.messageTemplate
+          });
       const tab = resolved?.tab || null;
       if (!tab || typeof tab.id !== "number") {
         App.setStatusWarning("");

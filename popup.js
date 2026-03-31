@@ -235,7 +235,7 @@
       });
 
       if (resolved?.tab && App.isValidContactsPayload(resolved?.probeResponse)) {
-        await App.loadContacts({ loadAll: true });
+        await App.loadContacts({ loadAll: true, sourceTab: resolved.tab });
         return;
       }
 
@@ -249,7 +249,7 @@
         return;
       }
 
-      await App.loadContacts({ loadAll: true });
+      await App.loadContacts({ loadAll: true, sourceTab: refreshedTab });
     } catch (_error) {
       App.setStatus("Refreshing HubSpot contacts tab...");
       const refreshedTab = await App.refreshHubSpotContactsSourceTab({
@@ -260,7 +260,7 @@
         App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
         return;
       }
-      await App.loadContacts({ loadAll: true });
+      await App.loadContacts({ loadAll: true, sourceTab: refreshedTab });
     }
   });
   if (dom.copyEmailBtn) {

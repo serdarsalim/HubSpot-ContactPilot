@@ -681,6 +681,13 @@
         gap: 8px;
       }
 
+      .cp-active-contact-phone-action-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
       .cp-contact-index-whatsapp-btn {
         display: inline-flex;
         align-items: center;
@@ -715,6 +722,40 @@
       }
 
       .cp-contact-index-whatsapp-btn svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.7;
+      }
+
+      .cp-active-contact-whatsapp-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: 1px solid rgba(18, 140, 76, 0.22);
+        border-radius: 999px;
+        background: #25d366;
+        color: #ffffff;
+        cursor: pointer;
+        pointer-events: auto;
+        box-shadow: 0 2px 8px rgba(37, 211, 102, 0.28);
+        transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+        flex: 0 0 auto;
+      }
+
+      .cp-active-contact-whatsapp-btn:hover,
+      .cp-active-contact-whatsapp-btn:focus-visible {
+        background: #1fbe5d;
+        border-color: rgba(18, 140, 76, 0.38);
+        box-shadow: 0 4px 12px rgba(31, 190, 93, 0.34);
+        transform: translateY(-1px);
+        outline: none;
+      }
+
+      .cp-active-contact-whatsapp-btn svg {
         width: 14px;
         height: 14px;
         stroke: currentColor;
@@ -876,6 +917,22 @@
     return button;
   }
 
+  function createActiveContactWhatsappButton(waUrl) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cp-active-contact-whatsapp-btn";
+    button.dataset.waUrl = waUrl;
+    button.setAttribute("aria-label", "Open number in WhatsApp");
+    button.setAttribute("title", "Open in WhatsApp");
+    button.innerHTML = inlineActionIcon("whatsapp");
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await openOrReuseWhatsappTab(waUrl);
+    });
+    return button;
+  }
+
   function decorateContactIndexPhoneCell(phoneCell) {
     if (!(phoneCell instanceof Element)) return;
     if (phoneCell.querySelector(".cp-contact-index-whatsapp-btn")) return;
@@ -919,12 +976,89 @@
     }
   }
 
+  function findActiveContactPhoneValueElement() {
+    const telAnchor = Array.from(document.querySelectorAll("a[href^='tel:']")).find((node) => isVisible(node) && PHONE_PATTERN.test(cleanText(node.textContent || node.getAttribute("href") || "")));
+    if (telAnchor) return telAnchor;
+
+    const labels = Array.from(document.querySelectorAll("label, dt, th, span, div, p, strong, h4, h5"));
+    for (const labelNode of labels) {
+      if (!isVisible(labelNode)) continue;
+      const labelText = cleanText(labelNode.textContent || "");
+      if (!labelText || labelText.length > 60 || !/\bphone(?: number)?\b/i.test(labelText)) continue;
+
+      const sibling = labelNode.nextElementSibling;
+      if (sibling instanceof Element && isVisible(sibling) && PHONE_PATTERN.test(cleanText(sibling.textContent || ""))) {
+        return sibling;
+      }
+
+      const row = labelNode.closest("li, tr, [role='row'], section, article, div");
+      if (!(row instanceof Element)) continue;
+
+      const candidates = Array.from(row.querySelectorAll("a[href^='tel:'], a, span, div, p"))
+        .filter((node) => {
+          if (!(node instanceof Element) || node === labelNode || node.contains(labelNode)) return false;
+          if (!isVisible(node)) return false;
+          if (node.classList.contains("cp-active-contact-whatsapp-btn")) return false;
+          const text = cleanText(node.textContent || "");
+          if (!text || !PHONE_PATTERN.test(text)) return false;
+          if (/\bphone(?: number)?\b/i.test(text)) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const aTel = a instanceof HTMLAnchorElement && String(a.getAttribute("href") || "").startsWith("tel:") ? 1 : 0;
+          const bTel = b instanceof HTMLAnchorElement && String(b.getAttribute("href") || "").startsWith("tel:") ? 1 : 0;
+          if (aTel !== bTel) return bTel - aTel;
+          return cleanText(a.textContent || "").length - cleanText(b.textContent || "").length;
+        });
+
+      if (candidates[0]) return candidates[0];
+    }
+
+    return null;
+  }
+
+  function decorateActiveContactPhoneField() {
+    if (inferObjectKindFromPath() !== "contact" || !getRecordIdFromPath()) return;
+
+    const phoneValueEl = findActiveContactPhoneValueElement();
+    if (!(phoneValueEl instanceof Element)) return;
+
+    const rawPhone = cleanPhoneCandidate(phoneValueEl.textContent || phoneValueEl.getAttribute("href") || "");
+    const waUrl = buildContactIndexWhatsappUrl(rawPhone);
+    if (!waUrl) return;
+
+    const existingButton = phoneValueEl.parentElement?.querySelector(".cp-active-contact-whatsapp-btn") || null;
+    if (existingButton instanceof HTMLButtonElement) {
+      if (existingButton.dataset.waUrl === waUrl) return;
+      existingButton.remove();
+    }
+
+    const wrapper =
+      phoneValueEl.parentElement instanceof Element && phoneValueEl.parentElement.classList.contains("cp-active-contact-phone-action-wrap")
+        ? phoneValueEl.parentElement
+        : null;
+    const button = createActiveContactWhatsappButton(waUrl);
+
+    if (wrapper) {
+      wrapper.appendChild(button);
+      return;
+    }
+
+    const nextWrapper = document.createElement("span");
+    nextWrapper.className = "cp-active-contact-phone-action-wrap";
+    phoneValueEl.parentNode?.insertBefore(nextWrapper, phoneValueEl);
+    nextWrapper.appendChild(phoneValueEl);
+    nextWrapper.appendChild(button);
+  }
+
   function startContactIndexEnhancerWatcher() {
     ensureContactIndexNewTabStyles();
     enhanceContactIndexInlineButtons();
+    decorateActiveContactPhoneField();
     if (!document.body) return;
     const observer = new MutationObserver(() => {
       enhanceContactIndexInlineButtons();
+      decorateActiveContactPhoneField();
     });
     observer.observe(document.body, {
       childList: true,
