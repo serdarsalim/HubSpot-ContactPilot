@@ -127,6 +127,18 @@
     return App.sortTemplatesByUsage([...localTemplates, ...cloudTemplates], "whatsapp");
   }
 
+  function getFilteredWhatsappTemplates() {
+    const templates = getMergedWhatsappTemplates();
+    const query = App.normalizeSearchText(state.whatsappTemplatesSearchQuery || "");
+    const showCloud = state.whatsappTemplatesShowCloud !== false;
+    return templates.filter((template) => {
+      if (!showCloud && template?.source === "cloud") return false;
+      if (!query) return true;
+      const name = App.normalizeSearchText(template?.name || "");
+      return name.includes(query);
+    });
+  }
+
   function getActiveWhatsappTemplateDraft() {
     return state.whatsappTemplatesDraft.find((template) => template.id === state.activeWhatsappTemplateId) || null;
   }
@@ -155,10 +167,21 @@
   }
 
   function renderWhatsappTemplatesList() {
-    const templates = getMergedWhatsappTemplates();
+    const allTemplates = getMergedWhatsappTemplates();
+    const templates = getFilteredWhatsappTemplates();
     if (!dom.whatsappTemplatesListEl) return;
-    if (!templates.length) {
+    if (dom.whatsappTemplatesSearchInput && dom.whatsappTemplatesSearchInput.value !== state.whatsappTemplatesSearchQuery) {
+      dom.whatsappTemplatesSearchInput.value = state.whatsappTemplatesSearchQuery;
+    }
+    const hasCloudTemplates = allTemplates.some((template) => template?.source === "cloud");
+    if (dom.whatsappCloudToggleWrap) dom.whatsappCloudToggleWrap.hidden = !hasCloudTemplates;
+    if (dom.whatsappCloudToggleInput) dom.whatsappCloudToggleInput.checked = state.whatsappTemplatesShowCloud !== false;
+    if (!allTemplates.length) {
       dom.whatsappTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates yet.</div>";
+      return;
+    }
+    if (!templates.length) {
+      dom.whatsappTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates match the current filters.</div>";
       return;
     }
 
@@ -235,6 +258,21 @@
   }
 
   function renderActiveWhatsappTemplateEditor() {
+    const visibleTemplates = getFilteredWhatsappTemplates();
+    if (!visibleTemplates.length) {
+      if (dom.whatsappTemplateEmptyEl) {
+        dom.whatsappTemplateEmptyEl.hidden = false;
+        dom.whatsappTemplateEmptyEl.textContent = getMergedWhatsappTemplates().length
+          ? "No templates match the current filters."
+          : "Select a template from the left or create a new one.";
+      }
+      if (dom.whatsappTemplateEditorEl) dom.whatsappTemplateEditorEl.hidden = true;
+      setWhatsappEditorReadOnly(false);
+      return;
+    }
+    if (visibleTemplates.length && !visibleTemplates.some((template) => template.id === state.activeWhatsappTemplateId)) {
+      state.activeWhatsappTemplateId = visibleTemplates[0]?.id || "";
+    }
     const active = getActiveWhatsappTemplateAny();
     const hasActive = !!active;
     const activeIsCloud = isCloudTemplate(active);

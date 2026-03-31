@@ -26,6 +26,22 @@
   if (dom.addEmailTemplateBtn) {
     dom.addEmailTemplateBtn.addEventListener("click", App.addEmailTemplateDraft);
   }
+  if (dom.emailTemplatesSearchInput) {
+    dom.emailTemplatesSearchInput.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.emailTemplatesSearchQuery = String(target.value || "");
+      App.renderEmailTemplatesPage();
+    });
+  }
+  if (dom.emailCloudToggleInput) {
+    dom.emailCloudToggleInput.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.emailTemplatesShowCloud = target.checked;
+      App.renderEmailTemplatesPage();
+    });
+  }
 
   if (dom.emailTemplatesListEl) {
     dom.emailTemplatesListEl.addEventListener("click", (event) => {
@@ -43,6 +59,22 @@
   if (dom.addWhatsappTemplateBtn) {
     dom.addWhatsappTemplateBtn.addEventListener("click", App.addWhatsappTemplateDraft);
   }
+  if (dom.whatsappTemplatesSearchInput) {
+    dom.whatsappTemplatesSearchInput.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.whatsappTemplatesSearchQuery = String(target.value || "");
+      App.renderWhatsappTemplatesPage();
+    });
+  }
+  if (dom.whatsappCloudToggleInput) {
+    dom.whatsappCloudToggleInput.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.whatsappTemplatesShowCloud = target.checked;
+      App.renderWhatsappTemplatesPage();
+    });
+  }
 
   if (dom.whatsappTemplatesListEl) {
     dom.whatsappTemplatesListEl.addEventListener("click", (event) => {
@@ -59,6 +91,22 @@
 
   if (dom.addNoteTemplateBtn) {
     dom.addNoteTemplateBtn.addEventListener("click", App.addNoteTemplateDraft);
+  }
+  if (dom.noteTemplatesSearchInput) {
+    dom.noteTemplatesSearchInput.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.noteTemplatesSearchQuery = String(target.value || "");
+      App.renderNoteTemplatesPage();
+    });
+  }
+  if (dom.noteCloudToggleInput) {
+    dom.noteCloudToggleInput.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      state.noteTemplatesShowCloud = target.checked;
+      App.renderNoteTemplatesPage();
+    });
   }
 
   if (dom.noteTemplatesListEl) {

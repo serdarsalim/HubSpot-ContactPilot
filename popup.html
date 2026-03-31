@@ -1968,7 +1968,37 @@
         border-bottom: 1px solid #e6edf5;
       }
 
+      .email-templates-sidebar-tools {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
       .email-add-template-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .template-cloud-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 600;
+        color: #587087;
+        user-select: none;
+      }
+
+      .template-cloud-toggle[hidden] {
+        display: none;
+      }
+
+      .template-cloud-toggle .ios-switch {
+        flex: 0 0 auto;
+      }
+
+      .template-tab-search {
         width: 100%;
       }
 
@@ -2365,6 +2395,10 @@
 
       body[data-theme="dark"] .email-templates-sidebar-head {
         border-bottom-color: #32465f;
+      }
+
+      body[data-theme="dark"] .template-cloud-toggle {
+        color: #9fb4ca;
       }
 
       body[data-theme="dark"] .email-template-list-btn,
@@ -2815,7 +2849,23 @@
       <div class="email-templates-shell">
         <aside class="email-templates-sidebar">
           <div class="email-templates-sidebar-head">
-            <button id="addEmailTemplateBtn" class="btn primary email-add-template-btn" type="button">Add Email Template</button>
+            <div class="email-templates-sidebar-tools">
+              <button id="addEmailTemplateBtn" class="btn primary email-add-template-btn" type="button">Add Email Template</button>
+              <label id="emailCloudToggleWrap" class="template-cloud-toggle" hidden>
+                <span>Cloud</span>
+                <span class="ios-switch">
+                  <input id="emailCloudToggleInput" type="checkbox" role="switch" aria-label="Show cloud email templates" checked />
+                  <span class="ios-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+            </div>
+            <input
+              id="emailTemplatesSearchInput"
+              class="email-template-pick-search template-tab-search"
+              type="search"
+              placeholder="Search templates..."
+              aria-label="Search email templates"
+            />
           </div>
           <div id="emailTemplatesList" class="email-templates-list"></div>
         </aside>
@@ -2850,7 +2900,23 @@
       <div class="email-templates-shell">
         <aside class="email-templates-sidebar">
           <div class="email-templates-sidebar-head">
-            <button id="addWhatsappTemplateBtn" class="btn primary email-add-template-btn" type="button">Add WhatsApp Template</button>
+            <div class="email-templates-sidebar-tools">
+              <button id="addWhatsappTemplateBtn" class="btn primary email-add-template-btn" type="button">Add WhatsApp Template</button>
+              <label id="whatsappCloudToggleWrap" class="template-cloud-toggle" hidden>
+                <span>Cloud</span>
+                <span class="ios-switch">
+                  <input id="whatsappCloudToggleInput" type="checkbox" role="switch" aria-label="Show cloud WhatsApp templates" checked />
+                  <span class="ios-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+            </div>
+            <input
+              id="whatsappTemplatesSearchInput"
+              class="email-template-pick-search template-tab-search"
+              type="search"
+              placeholder="Search templates..."
+              aria-label="Search WhatsApp templates"
+            />
           </div>
           <div id="whatsappTemplatesList" class="email-templates-list"></div>
         </aside>
@@ -2879,7 +2945,23 @@
       <div class="email-templates-shell">
         <aside class="email-templates-sidebar">
           <div class="email-templates-sidebar-head">
-            <button id="addNoteTemplateBtn" class="btn primary email-add-template-btn" type="button">Add Note Template</button>
+            <div class="email-templates-sidebar-tools">
+              <button id="addNoteTemplateBtn" class="btn primary email-add-template-btn" type="button">Add Note Template</button>
+              <label id="noteCloudToggleWrap" class="template-cloud-toggle" hidden>
+                <span>Cloud</span>
+                <span class="ios-switch">
+                  <input id="noteCloudToggleInput" type="checkbox" role="switch" aria-label="Show cloud note templates" checked />
+                  <span class="ios-switch-track" aria-hidden="true"></span>
+                </span>
+              </label>
+            </div>
+            <input
+              id="noteTemplatesSearchInput"
+              class="email-template-pick-search template-tab-search"
+              type="search"
+              placeholder="Search templates..."
+              aria-label="Search note templates"
+            />
           </div>
           <div id="noteTemplatesList" class="email-templates-list"></div>
         </aside>

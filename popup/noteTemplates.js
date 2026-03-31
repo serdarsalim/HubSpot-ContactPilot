@@ -123,6 +123,19 @@
     return [...localTemplates, ...cloudTemplates];
   }
 
+  function getFilteredNoteTemplates() {
+    const templates = getMergedNoteTemplates();
+    const query = App.normalizeSearchText(state.noteTemplatesSearchQuery || "");
+    const showCloud = state.noteTemplatesShowCloud !== false;
+    return templates.filter((template) => {
+      if (!showCloud && template?.source === "cloud") return false;
+      if (!query) return true;
+      const name = App.normalizeSearchText(template?.name || "");
+      const body = App.normalizeSearchText(template?.body || "");
+      return name.includes(query) || body.includes(query);
+    });
+  }
+
   function getActiveNoteTemplateDraft() {
     return state.noteTemplatesDraft.find((template) => template.id === state.activeNoteTemplateId) || null;
   }
@@ -151,10 +164,21 @@
   }
 
   function renderNoteTemplatesList() {
-    const templates = getMergedNoteTemplates();
+    const allTemplates = getMergedNoteTemplates();
+    const templates = getFilteredNoteTemplates();
     if (!dom.noteTemplatesListEl) return;
-    if (!templates.length) {
+    if (dom.noteTemplatesSearchInput && dom.noteTemplatesSearchInput.value !== state.noteTemplatesSearchQuery) {
+      dom.noteTemplatesSearchInput.value = state.noteTemplatesSearchQuery;
+    }
+    const hasCloudTemplates = allTemplates.some((template) => template?.source === "cloud");
+    if (dom.noteCloudToggleWrap) dom.noteCloudToggleWrap.hidden = !hasCloudTemplates;
+    if (dom.noteCloudToggleInput) dom.noteCloudToggleInput.checked = state.noteTemplatesShowCloud !== false;
+    if (!allTemplates.length) {
       dom.noteTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates yet.</div>";
+      return;
+    }
+    if (!templates.length) {
+      dom.noteTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates match the current filters.</div>";
       return;
     }
 
@@ -231,6 +255,21 @@
   }
 
   function renderActiveNoteTemplateEditor() {
+    const visibleTemplates = getFilteredNoteTemplates();
+    if (!visibleTemplates.length) {
+      if (dom.noteTemplateEmptyEl) {
+        dom.noteTemplateEmptyEl.hidden = false;
+        dom.noteTemplateEmptyEl.textContent = getMergedNoteTemplates().length
+          ? "No templates match the current filters."
+          : "Select a template from the left or create a new one.";
+      }
+      if (dom.noteTemplateEditorEl) dom.noteTemplateEditorEl.hidden = true;
+      setNoteEditorReadOnly(false);
+      return;
+    }
+    if (visibleTemplates.length && !visibleTemplates.some((template) => template.id === state.activeNoteTemplateId)) {
+      state.activeNoteTemplateId = visibleTemplates[0]?.id || "";
+    }
     const active = getActiveNoteTemplateAny();
     const hasActive = !!active;
     const activeIsCloud = isCloudTemplate(active);

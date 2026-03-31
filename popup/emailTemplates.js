@@ -474,6 +474,19 @@
     return App.sortTemplatesByUsage([...localTemplates, ...cloudTemplates], "email");
   }
 
+  function getFilteredEmailTemplates() {
+    const templates = getMergedEmailTemplates();
+    const query = App.normalizeSearchText(state.emailTemplatesSearchQuery || "");
+    const showCloud = state.emailTemplatesShowCloud !== false;
+    return templates.filter((template) => {
+      if (!showCloud && template?.source === "cloud") return false;
+      if (!query) return true;
+      const name = App.normalizeSearchText(template?.name || "");
+      const subject = App.normalizeSearchText(template?.subject || "");
+      return name.includes(query) || subject.includes(query);
+    });
+  }
+
   function getActiveEmailTemplateDraft() {
     return state.emailTemplatesDraft.find((template) => template.id === state.activeEmailTemplateId) || null;
   }
@@ -508,10 +521,21 @@
   }
 
   function renderEmailTemplatesList() {
-    const templates = getMergedEmailTemplates();
+    const allTemplates = getMergedEmailTemplates();
+    const templates = getFilteredEmailTemplates();
     if (!dom.emailTemplatesListEl) return;
-    if (!templates.length) {
+    if (dom.emailTemplatesSearchInput && dom.emailTemplatesSearchInput.value !== state.emailTemplatesSearchQuery) {
+      dom.emailTemplatesSearchInput.value = state.emailTemplatesSearchQuery;
+    }
+    const hasCloudTemplates = allTemplates.some((template) => template?.source === "cloud");
+    if (dom.emailCloudToggleWrap) dom.emailCloudToggleWrap.hidden = !hasCloudTemplates;
+    if (dom.emailCloudToggleInput) dom.emailCloudToggleInput.checked = state.emailTemplatesShowCloud !== false;
+    if (!allTemplates.length) {
       dom.emailTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates yet.</div>";
+      return;
+    }
+    if (!templates.length) {
+      dom.emailTemplatesListEl.innerHTML = "<div class='email-template-empty'>No templates match the current filters.</div>";
       return;
     }
 
@@ -588,6 +612,21 @@
   }
 
   function renderActiveEmailTemplateEditor() {
+    const visibleTemplates = getFilteredEmailTemplates();
+    if (!visibleTemplates.length) {
+      if (dom.emailTemplateEmptyEl) {
+        dom.emailTemplateEmptyEl.hidden = false;
+        dom.emailTemplateEmptyEl.textContent = getMergedEmailTemplates().length
+          ? "No templates match the current filters."
+          : "Select a template from the left or create a new one.";
+      }
+      if (dom.emailTemplateEditorEl) dom.emailTemplateEditorEl.hidden = true;
+      setEmailEditorReadOnly(false);
+      return;
+    }
+    if (visibleTemplates.length && !visibleTemplates.some((template) => template.id === state.activeEmailTemplateId)) {
+      state.activeEmailTemplateId = visibleTemplates[0]?.id || "";
+    }
     const active = getActiveEmailTemplateAny();
     const hasActive = !!active;
     const activeIsCloud = isCloudTemplate(active);
