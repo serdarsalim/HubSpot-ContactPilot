@@ -10,7 +10,6 @@
     });
   }
   if (dom.contactViewBtn) dom.contactViewBtn.addEventListener("click", App.openContactsView);
-  if (dom.activeTabBtn) dom.activeTabBtn.addEventListener("click", App.toggleActiveTab);
   if (dom.emailSettingsBtn) dom.emailSettingsBtn.addEventListener("click", App.toggleEmailSettings);
   if (dom.whatsappSettingsBtn) dom.whatsappSettingsBtn.addEventListener("click", App.toggleWhatsappSettings);
   if (dom.noteSettingsBtn) dom.noteSettingsBtn.addEventListener("click", App.toggleNoteSettings);
@@ -241,7 +240,10 @@
       }
 
       App.setStatus("Refreshing HubSpot contacts tab...");
-      const refreshedTab = await App.refreshHubSpotContactsSourceTab();
+      const refreshedTab = await App.refreshHubSpotContactsSourceTab({
+        countryPrefix: settings.countryPrefix,
+        messageText: settings.messageTemplate
+      });
       if (!refreshedTab || typeof refreshedTab.id !== "number") {
         App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
         return;
@@ -250,7 +252,10 @@
       await App.loadContacts({ loadAll: true });
     } catch (_error) {
       App.setStatus("Refreshing HubSpot contacts tab...");
-      const refreshedTab = await App.refreshHubSpotContactsSourceTab();
+      const refreshedTab = await App.refreshHubSpotContactsSourceTab({
+        countryPrefix: settings.countryPrefix,
+        messageText: settings.messageTemplate
+      });
       if (!refreshedTab || typeof refreshedTab.id !== "number") {
         App.setStatus("Open a HubSpot contacts tab, refresh the page, and try again.");
         return;

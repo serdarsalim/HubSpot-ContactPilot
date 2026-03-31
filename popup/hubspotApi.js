@@ -52,6 +52,13 @@
     return !!recordId;
   }
 
+  function isLikelyContactsListTab(tab) {
+    const url = String(tab?.url || "");
+    if (!App.isHubSpotUrl(url)) return false;
+    if (/\/record\/0-\d+\//i.test(url)) return false;
+    return /\/contacts\//i.test(url);
+  }
+
   async function sendGetContactsMessage(tabId, { countryPrefix = "", messageText = "", loadAll = false } = {}) {
     return chrome.tabs.sendMessage(tabId, {
       type: MT.GET_CONTACTS,
@@ -90,12 +97,23 @@
     return null;
   }
 
-  async function refreshHubSpotContactsSourceTab() {
-    const activeHubSpotTab = await findActiveHubSpotTab();
-    const tabToRefresh =
-      activeHubSpotTab && typeof activeHubSpotTab.id === "number"
-        ? activeHubSpotTab
-        : await findHubSpotTab();
+  async function refreshHubSpotContactsSourceTab({ countryPrefix = "", messageText = "" } = {}) {
+    const resolvedContactsTab = await findBestContactsTab({ countryPrefix, messageText });
+    let tabToRefresh = resolvedContactsTab?.tab || null;
+
+    if (!tabToRefresh || typeof tabToRefresh.id !== "number") {
+      const hubSpotTabs = await chrome.tabs.query({ url: hubSpotUrlPatterns });
+      const likelyContactsTabs = hubSpotTabs.filter(isLikelyContactsListTab).sort(compareTabsByRecency);
+      tabToRefresh = likelyContactsTabs[0] || null;
+    }
+
+    if (!tabToRefresh || typeof tabToRefresh.id !== "number") {
+      const activeHubSpotTab = await findActiveHubSpotTab();
+      tabToRefresh =
+        activeHubSpotTab && typeof activeHubSpotTab.id === "number"
+          ? activeHubSpotTab
+          : await findHubSpotTab();
+    }
 
     if (!tabToRefresh || typeof tabToRefresh.id !== "number") return null;
 
