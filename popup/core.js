@@ -469,6 +469,24 @@
     return String(templateIdInput || "").replace(new RegExp(`^${CLOUD_TEMPLATE_ID_PREFIX}`), "");
   }
 
+  function getRawCloudTemplateId(item, organizationIdInput = "") {
+    const organizationId = String(item?.organizationId || organizationIdInput || "").trim();
+    const directCloudId = stripCloudTemplatePrefix(String(item?.cloudId || "").trim());
+    if (directCloudId) {
+      if (organizationId && directCloudId.startsWith(`${organizationId}_`)) {
+        return directCloudId.slice(organizationId.length + 1);
+      }
+      return directCloudId;
+    }
+
+    const directId = stripCloudTemplatePrefix(String(item?.id || "").trim());
+    if (!directId) return "";
+    if (organizationId && directId.startsWith(`${organizationId}_`)) {
+      return directId.slice(organizationId.length + 1);
+    }
+    return directId;
+  }
+
   function normalizeCloudApiBaseUrl(value) {
     const raw = String(value || "")
       .trim()
@@ -502,9 +520,9 @@
     const source = Array.isArray(rawTemplates) ? rawTemplates : [];
 
     for (const item of source) {
-      const baseId = String(item?.id || "").trim();
-      if (!baseId) continue;
       const organizationId = String(item?.organizationId || organizationIdInput || state.cloud?.auth?.organizationId || "").trim();
+      const baseId = getRawCloudTemplateId(item, organizationId);
+      if (!baseId) continue;
       const compositeId = organizationId ? `${organizationId}_${baseId}` : baseId;
       const id = `${CLOUD_TEMPLATE_ID_PREFIX}${compositeId}`;
       if (seen.has(id)) continue;
@@ -581,6 +599,38 @@
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .trim();
+  }
+
+  function findCloudAuthByOrganizationId(organizationIdInput) {
+    const organizationId = String(organizationIdInput || "").trim();
+    if (!organizationId) return null;
+    return (state.cloud?.authList || []).find((item) => String(item?.organizationId || "").trim() === organizationId) || null;
+  }
+
+  async function trackCloudTemplateUse(template) {
+    if (!template || String(template?.source || "").toLowerCase() !== "cloud") return false;
+
+    const cloudId = String(template?.cloudId || "").trim();
+    const organizationId = String(template?.organizationId || "").trim();
+    if (!cloudId || !organizationId) return false;
+
+    const auth = findCloudAuthByOrganizationId(organizationId);
+    const apiToken = String(auth?.apiToken || "").trim();
+    const apiBaseUrl = normalizeCloudApiBaseUrl(auth?.apiBaseUrl);
+    if (!apiToken || !apiBaseUrl) return false;
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/extension/templates/${encodeURIComponent(cloudId)}/track-use`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${apiToken}`
+        }
+      });
+      return !!response?.ok;
+    } catch (_error) {
+      return false;
+    }
   }
 
   function applyTokens(text, tokens) {
@@ -1388,6 +1438,8 @@
     getMergedNoteTemplates,
     templateTokenKey,
     normalizeSearchText,
+    findCloudAuthByOrganizationId,
+    trackCloudTemplateUse,
     applyTokens,
     normalizeThemeMode,
     normalizeLaunchMode,

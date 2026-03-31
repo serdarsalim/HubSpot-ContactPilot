@@ -552,6 +552,7 @@
     try {
       await openOrReuseWhatsappTab(waUrl);
       App.markTemplateApplied("whatsapp", resolvedKey, template.id);
+      void App.trackCloudTemplateUse(template);
       App.setStatus(`Opened WhatsApp for ${App.getContactDisplayName(contact)}.`);
       if (typeof App.trackEvent === "function") {
         App.trackEvent("whatsapp_template_applied", {

@@ -6,6 +6,36 @@ const SETTINGS_KEY = "popupSettings";
 const DEFAULT_LAUNCH_MODE = "attached";
 const OPEN_POPUP_WINDOW_MESSAGE = "OPEN_POPUP_WINDOW";
 const OPEN_OR_REUSE_WHATSAPP_TAB_MESSAGE = "OPEN_OR_REUSE_WHATSAPP_TAB";
+const TRACK_CLOUD_TEMPLATE_USE_MESSAGE = "TRACK_CLOUD_TEMPLATE_USE";
+
+async function trackCloudTemplateUse(input) {
+  const apiBaseUrl = String(input?.apiBaseUrl || "").trim().replace(/\/+$/g, "");
+  const apiToken = String(input?.apiToken || "").trim();
+  const templateId = String(input?.templateId || "").trim();
+  if (!apiBaseUrl) {
+    throw new Error("Cloud API base URL is missing.");
+  }
+  if (!apiToken) {
+    throw new Error("Cloud API token is missing.");
+  }
+  if (!templateId) {
+    throw new Error("Cloud template id is missing.");
+  }
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/extension/templates/${encodeURIComponent(templateId)}/track-use`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${apiToken}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Track use failed with status ${response.status}.`);
+  }
+
+  return true;
+}
 
 async function openOrFocusPopupWindow() {
   const existingTabs = await chrome.tabs.query({ url: [DETACHED_POPUP_URL, ATTACHED_POPUP_URL] });
@@ -148,6 +178,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === OPEN_OR_REUSE_WHATSAPP_TAB_MESSAGE) {
     openOrReuseWhatsappTab(message?.url, _sender)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error || "Unknown error") }));
+    return true;
+  }
+
+  if (message?.type === TRACK_CLOUD_TEMPLATE_USE_MESSAGE) {
+    trackCloudTemplateUse(message)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: String(error?.message || error || "Unknown error") }));
     return true;

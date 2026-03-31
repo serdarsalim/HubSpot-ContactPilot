@@ -10,7 +10,8 @@
     GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
     APPLY_EMAIL_TEMPLATE_ON_PAGE: "APPLY_EMAIL_TEMPLATE_ON_PAGE",
     OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE",
-    OPEN_OR_REUSE_WHATSAPP_TAB: "OPEN_OR_REUSE_WHATSAPP_TAB"
+    OPEN_OR_REUSE_WHATSAPP_TAB: "OPEN_OR_REUSE_WHATSAPP_TAB",
+    TRACK_CLOUD_TEMPLATE_USE: "TRACK_CLOUD_TEMPLATE_USE"
   });
   const TIMING = shared.TIMING?.content || Object.freeze({
     tableScrollDelayMs: 240,
@@ -739,7 +740,7 @@
       type: MESSAGE_TYPES.OPEN_OR_REUSE_WHATSAPP_TAB,
       url: targetUrl
     });
-    if (response?.ok) return;
+    if (response === undefined || response?.ok) return;
     throw new Error(String(response?.error || "Could not open WhatsApp tab."));
   }
 
@@ -2217,6 +2218,7 @@
       note: [],
       whatsapp: []
     },
+    cloudAuthList: [],
     templateUsageByContact: {},
     noteTemplateUsageByContact: {},
     enabled: true,
@@ -2328,7 +2330,13 @@
       const organizationId = cleanText(item?.organizationId || "");
       if (!organizationId || seen.has(organizationId)) continue;
       seen.add(organizationId);
-      normalized.push({ organizationId });
+      normalized.push({
+        organizationId,
+        apiToken: cleanText(item?.apiToken || ""),
+        apiBaseUrl: cleanText(item?.apiBaseUrl || ""),
+        organizationName: cleanText(item?.organizationName || ""),
+        organizationSlug: cleanText(item?.organizationSlug || "")
+      });
     }
     return normalized;
   }
@@ -2343,16 +2351,26 @@
     };
   }
 
-  function buildInlineCloudTemplateId(item, organizationIdInput = "") {
-    const directId = cleanText(item?.id || "");
-    if (directId.startsWith(CLOUD_TEMPLATE_ID_PREFIX)) return directId;
-    if (directId) {
-      const orgId = cleanText(item?.organizationId || organizationIdInput || "");
-      if (orgId) return `${CLOUD_TEMPLATE_ID_PREFIX}${orgId}_${directId}`;
-      return `${CLOUD_TEMPLATE_ID_PREFIX}${directId}`;
+  function getInlineRawCloudTemplateId(item, organizationIdInput = "") {
+    const organizationId = cleanText(item?.organizationId || organizationIdInput || "");
+    const directCloudId = cleanText(item?.cloudId || "").replace(new RegExp(`^${CLOUD_TEMPLATE_ID_PREFIX}`), "");
+    if (directCloudId) {
+      if (organizationId && directCloudId.startsWith(`${organizationId}_`)) {
+        return directCloudId.slice(organizationId.length + 1);
+      }
+      return directCloudId;
     }
 
-    const cloudId = cleanText(item?.cloudId || "");
+    const directId = cleanText(item?.id || "").replace(new RegExp(`^${CLOUD_TEMPLATE_ID_PREFIX}`), "");
+    if (!directId) return "";
+    if (organizationId && directId.startsWith(`${organizationId}_`)) {
+      return directId.slice(organizationId.length + 1);
+    }
+    return directId;
+  }
+
+  function buildInlineCloudTemplateId(item, organizationIdInput = "") {
+    const cloudId = getInlineRawCloudTemplateId(item, organizationIdInput);
     if (!cloudId) return "";
     const orgId = cleanText(item?.organizationId || organizationIdInput || "");
     if (orgId) return `${CLOUD_TEMPLATE_ID_PREFIX}${orgId}_${cloudId}`;
@@ -2368,8 +2386,11 @@
       const id = buildInlineCloudTemplateId(item, organizationIdInput);
       if (!id || seen.has(id)) continue;
       seen.add(id);
+      const cloudId = getInlineRawCloudTemplateId(item, organizationIdInput);
       templates.push({
         id,
+        cloudId,
+        organizationId: cleanText(item?.organizationId || organizationIdInput || ""),
         name: cleanText(item?.name || "Untitled") || "Untitled",
         subject: String(item?.subject || ""),
         body: String(item?.body || ""),
@@ -2389,8 +2410,11 @@
       const id = buildInlineCloudTemplateId(item, organizationIdInput);
       if (!id || seen.has(id)) continue;
       seen.add(id);
+      const cloudId = getInlineRawCloudTemplateId(item, organizationIdInput);
       templates.push({
         id,
+        cloudId,
+        organizationId: cleanText(item?.organizationId || organizationIdInput || ""),
         name: cleanText(item?.name || "Untitled") || "Untitled",
         body: String(item?.body || ""),
         source: "cloud"
@@ -2409,8 +2433,11 @@
       const id = buildInlineCloudTemplateId(item, organizationIdInput);
       if (!id || seen.has(id)) continue;
       seen.add(id);
+      const cloudId = getInlineRawCloudTemplateId(item, organizationIdInput);
       templates.push({
         id,
+        cloudId,
+        organizationId: cleanText(item?.organizationId || organizationIdInput || ""),
         name: cleanText(item?.name || "Untitled") || "Untitled",
         body: String(item?.body || ""),
         source: "cloud"
@@ -2620,6 +2647,37 @@
     persistInlineTemplateUsage();
   }
 
+  function findInlineCloudAuthByOrganizationId(organizationIdInput) {
+    const organizationId = cleanText(organizationIdInput || "");
+    if (!organizationId) return null;
+    return (inlineQuickActionsState.cloudAuthList || []).find((item) => cleanText(item?.organizationId || "") === organizationId) || null;
+  }
+
+  async function trackInlineCloudTemplateUse(template) {
+    if (!template || String(template?.source || "").toLowerCase() !== "cloud") return false;
+
+    const cloudId = cleanText(template?.cloudId || "");
+    const organizationId = cleanText(template?.organizationId || "");
+    if (!cloudId || !organizationId) return false;
+
+    const auth = findInlineCloudAuthByOrganizationId(organizationId);
+    const apiToken = cleanText(auth?.apiToken || "");
+    const apiBaseUrl = cleanText(auth?.apiBaseUrl || "");
+    if (!apiToken || !apiBaseUrl) return false;
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.TRACK_CLOUD_TEMPLATE_USE,
+        apiBaseUrl,
+        apiToken,
+        templateId: cloudId
+      });
+      return !!response?.ok;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function inlineTokenKey(input) {
     return String(input || "")
       .trim()
@@ -2729,6 +2787,7 @@
     const sync = await readStorageArea("sync", [SETTINGS_KEY]);
 
     const cloudAuthList = normalizeInlineCloudAuthList(local?.[CLOUD_AUTH_LIST_LOCAL_KEY], local?.[CLOUD_AUTH_LOCAL_KEY]);
+    inlineQuickActionsState.cloudAuthList = cloudAuthList;
     const cacheKeys = [];
     for (const auth of cloudAuthList) {
       const keys = getInlineCloudCacheKeys(auth.organizationId);
@@ -3456,14 +3515,17 @@
       if (kind === "email") {
         await applyInlineEmailTemplate(template);
         markInlineTemplateUsed("email", template.id);
+        void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
       } else if (kind === "note") {
         await applyInlineNoteTemplate(template);
         markInlineTemplateUsed("note", template.id);
+        void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
       } else if (kind === "whatsapp") {
         await applyInlineWhatsappTemplate(template);
         markInlineTemplateUsed("whatsapp", template.id);
+        void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
       }
       renderInlineQuickActionsPanel("");

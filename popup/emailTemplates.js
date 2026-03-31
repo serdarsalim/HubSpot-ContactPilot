@@ -790,6 +790,7 @@
       }
 
       App.markTemplateApplied("email", resolvedKey, template.id);
+      void App.trackCloudTemplateUse(template);
       App.setStatus(`Applied "${template.name}" for ${App.getContactDisplayName(contact)}.`);
       if (typeof App.trackEvent === "function") {
         App.trackEvent("template_applied", {

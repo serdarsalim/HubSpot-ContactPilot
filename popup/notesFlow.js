@@ -184,6 +184,11 @@
     }
 
     const text = String(dom.notesTextInput?.value || "").trim();
+    const selectedTemplateId = String(dom.notesTemplateSelect?.value || "").trim();
+    const selectedTemplate =
+      selectedTemplateId && typeof App.getMergedNoteTemplates === "function"
+        ? (App.getMergedNoteTemplates().find((template) => template.id === selectedTemplateId) || null)
+        : null;
     if (!text) {
       App.setStatus("Note text cannot be empty.");
       return;
@@ -207,6 +212,7 @@
     }
 
     state.notesDialogState.notes = [text, ...state.notesDialogState.notes];
+    void App.trackCloudTemplateUse(selectedTemplate);
     renderNotesHistory();
     if (dom.notesTextInput) dom.notesTextInput.value = state.settings.noteTemplate || "";
     if (dom.notesTemplateSelect) dom.notesTemplateSelect.value = "";
