@@ -481,7 +481,7 @@
               if (contactUrl) {
                 return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'><span class='name-cell-wrap'>${actionsHtml}<a href='${App.escapeHtml(
                   contactUrl
-                )}' target='_blank' rel='noopener noreferrer'>${App.escapeHtml(value)}</a></span></td>`;
+                )}' class='row-contact-link' data-key='${App.escapeHtml(key)}'>${App.escapeHtml(value)}</a></span></td>`;
               }
               return `<td class='${css}' data-col-id='${App.escapeHtml(col.id)}'><span class='name-cell-wrap'>${actionsHtml}<button type='button' class='name-link-btn row-missing-record-id-link' data-key='${App.escapeHtml(
                 key
@@ -589,6 +589,28 @@
       button.addEventListener("click", () => {
         App.openRecordIdRequiredDialog();
         App.setStatus("Could not detect this contact's HubSpot record link from the current row.");
+      });
+    });
+
+    dom.listEl.querySelectorAll(".row-contact-link").forEach((link) => {
+      link.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const key = link.getAttribute("data-key");
+        if (!key) return;
+        const contact = displayedByKey.get(key);
+        if (!contact) return;
+        const recordId = App.getRecordIdForContact(contact);
+        if (!recordId) {
+          App.openRecordIdRequiredDialog();
+          App.setStatus("Could not detect this contact's HubSpot record link from the current row.");
+          return;
+        }
+
+        try {
+          await App.openOrFocusContactTab(recordId, state.currentPortalId);
+        } catch (_error) {
+          App.setStatus("Could not open contact. Missing Record ID or Portal ID.");
+        }
       });
     });
 

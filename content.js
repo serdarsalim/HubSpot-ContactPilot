@@ -10,6 +10,7 @@
     GET_NOTES_ON_PAGE: "GET_NOTES_ON_PAGE",
     APPLY_EMAIL_TEMPLATE_ON_PAGE: "APPLY_EMAIL_TEMPLATE_ON_PAGE",
     OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE: "OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE",
+    OPEN_OR_FOCUS_CONTACT_TAB: "OPEN_OR_FOCUS_CONTACT_TAB",
     OPEN_OR_REUSE_WHATSAPP_TAB: "OPEN_OR_REUSE_WHATSAPP_TAB",
     TRACK_CLOUD_TEMPLATE_USE: "TRACK_CLOUD_TEMPLATE_USE"
   });
@@ -770,11 +771,16 @@
     document.head.appendChild(style);
   }
 
-  function openContactIndexLinkInNewTab(anchor) {
+  async function openContactIndexLinkInNewTab(anchor) {
     if (!(anchor instanceof HTMLAnchorElement)) return;
     const href = String(anchor.href || anchor.getAttribute("href") || "").trim();
     if (!href) return;
-    window.open(href, "_blank", "noopener,noreferrer");
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGE_TYPES.OPEN_OR_FOCUS_CONTACT_TAB,
+      url: href
+    });
+    if (response === undefined || response?.ok) return;
+    throw new Error(String(response?.error || "Could not open contact tab."));
   }
 
   async function openOrReuseWhatsappTab(url) {
@@ -869,16 +875,20 @@
       avatarNode.setAttribute("tabindex", "0");
       avatarNode.setAttribute("aria-label", "Open contact in new tab");
       avatarNode.setAttribute("title", "Open in new tab");
-      avatarNode.addEventListener("click", (event) => {
+      avatarNode.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
-        openContactIndexLinkInNewTab(anchor);
+        try {
+          await openContactIndexLinkInNewTab(anchor);
+        } catch (_error) {}
       });
-      avatarNode.addEventListener("keydown", (event) => {
+      avatarNode.addEventListener("keydown", async (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         event.stopPropagation();
-        openContactIndexLinkInNewTab(anchor);
+        try {
+          await openContactIndexLinkInNewTab(anchor);
+        } catch (_error) {}
       });
       anchor.dataset.cpInlineNewTabEnhanced = "1";
     }

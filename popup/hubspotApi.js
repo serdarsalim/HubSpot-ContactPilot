@@ -33,6 +33,26 @@
     return Number(b?.id || 0) - Number(a?.id || 0);
   }
 
+  async function focusTab(tab) {
+    const tabId = Number(tab?.id || 0);
+    if (!tabId) return;
+
+    const windowId = Number(tab?.windowId || 0);
+    if (windowId) {
+      try {
+        await chrome.windows.update(windowId, { focused: true });
+      } catch (_error) {
+        // Ignore focus failures and still try to activate the tab.
+      }
+    }
+
+    try {
+      await chrome.tabs.update(tabId, { active: true });
+    } catch (_error) {
+      // Ignore activation failures; caller will surface invalid-tab errors later.
+    }
+  }
+
   async function findActiveHubSpotTab() {
     const activeTabs = await chrome.tabs.query({ active: true });
     const candidates = activeTabs.filter((tab) => App.isHubSpotUrl(tab?.url || ""));
@@ -258,26 +278,52 @@
     return matchingTabs[0] || null;
   }
 
-  async function withContactTab(recordId, portalId, work, options = {}) {
-    const allowOpenFresh = options.allowOpenFresh !== false;
-    const interaction = String(options.interaction || "").trim().toLowerCase();
+  async function resolveHubSpotOriginForRecord(recordId, portalId = "") {
+    const existingTab = await findExistingContactTab(recordId, portalId);
+    if (existingTab?.url) return App.getHubSpotOrigin(existingTab.url);
+
+    const activeHubSpotTab = await findActiveHubSpotTab();
+    if (activeHubSpotTab?.url) return App.getHubSpotOrigin(activeHubSpotTab.url);
+
+    const fallbackHubSpotTab = await findHubSpotTab();
+    if (fallbackHubSpotTab?.url) return App.getHubSpotOrigin(fallbackHubSpotTab.url);
+
+    return App.getHubSpotOrigin(App.state?.currentHubSpotOrigin || "");
+  }
+
+  async function openOrFocusContactTab(recordId, portalId = "") {
     const cleanId = String(recordId || "").replace(/\D/g, "");
+    const cleanPortalId = String(portalId || "").replace(/\D/g, "");
     if (!cleanId) {
       throw new Error("Invalid Record ID.");
     }
 
-    const resolveHubSpotOrigin = async () => {
-      const existingTab = await findExistingContactTab(cleanId, portalId);
-      if (existingTab?.url) return App.getHubSpotOrigin(existingTab.url);
+    const existingTab = await findExistingContactTab(cleanId, cleanPortalId);
+    if (existingTab && typeof existingTab.id === "number") {
+      await focusTab(existingTab);
+      return existingTab;
+    }
 
-      const activeHubSpotTab = await findActiveHubSpotTab();
-      if (activeHubSpotTab?.url) return App.getHubSpotOrigin(activeHubSpotTab.url);
+    if (!cleanPortalId) {
+      throw new Error("Could not detect HubSpot portal ID for this contact.");
+    }
 
-      const fallbackHubSpotTab = await findHubSpotTab();
-      if (fallbackHubSpotTab?.url) return App.getHubSpotOrigin(fallbackHubSpotTab.url);
+    const url = App.buildHubSpotContactUrl(cleanId, cleanPortalId, await resolveHubSpotOriginForRecord(cleanId, cleanPortalId));
+    const openedTab = await chrome.tabs.create({ url, active: true });
+    if (!openedTab || typeof openedTab.id !== "number") {
+      throw new Error("Could not open HubSpot contact tab.");
+    }
+    return openedTab;
+  }
 
-      return App.getHubSpotOrigin(App.state?.currentHubSpotOrigin || "");
-    };
+  async function withContactTab(recordId, portalId, work, options = {}) {
+    const allowOpenFresh = options.allowOpenFresh !== false;
+    const interaction = String(options.interaction || "").trim().toLowerCase();
+    const cleanId = String(recordId || "").replace(/\D/g, "");
+    const cleanPortalId = String(portalId || "").replace(/\D/g, "");
+    if (!cleanId) {
+      throw new Error("Invalid Record ID.");
+    }
 
     const openFreshContactTabAndWork = async () => {
       if (!allowOpenFresh) {
@@ -286,7 +332,7 @@
       if (!portalId) {
         throw new Error("Could not detect HubSpot portal ID for this contact.");
       }
-      const baseUrl = App.buildHubSpotContactUrl(cleanId, portalId, await resolveHubSpotOrigin());
+      const baseUrl = App.buildHubSpotContactUrl(cleanId, portalId, await resolveHubSpotOriginForRecord(cleanId, portalId));
       const url = interaction ? `${baseUrl}?interaction=${encodeURIComponent(interaction)}` : baseUrl;
       const openedTab = await chrome.tabs.create({ url, active: false });
       if (!openedTab || typeof openedTab.id !== "number") {
@@ -300,6 +346,7 @@
 
     const existingTab = await findExistingContactTab(cleanId, portalId);
     if (existingTab && typeof existingTab.id === "number") {
+      await focusTab(existingTab);
       await waitForTabComplete(existingTab.id);
       await sleep(timing.contactTabPostLoadDelayMs);
       try {
@@ -311,7 +358,25 @@
         if (!allowOpenFresh) {
           throw new Error("Could not read notes from the current contact tab. Refresh that tab and try again.");
         }
-        // Existing tab can miss content-script receiver (e.g. stale tab). Retry on a fresh contact tab.
+        const retryPortalId = cleanPortalId || extractPortalIdFromContactUrl(existingTab?.url || "");
+        const retryBaseUrl = retryPortalId
+          ? App.buildHubSpotContactUrl(cleanId, retryPortalId, App.getHubSpotOrigin(existingTab?.url || ""))
+          : "";
+        const retryUrl = retryBaseUrl
+          ? interaction
+            ? `${retryBaseUrl}?interaction=${encodeURIComponent(interaction)}`
+            : retryBaseUrl
+          : existingTab?.url || "";
+
+        if (retryUrl) {
+          await chrome.tabs.update(existingTab.id, { url: retryUrl, active: true });
+          await focusTab(existingTab);
+          await waitForTabComplete(existingTab.id);
+          await sleep(timing.contactTabPostLoadDelayMs);
+          return work(existingTab.id);
+        }
+
+        // Fall back to a fresh tab only if we cannot safely reuse the existing one.
         return openFreshContactTabAndWork();
       }
     }
@@ -419,6 +484,7 @@
     refreshHubSpotContactsSourceTab,
     findBestContactRecordTab,
     extractPortalIdFromUrl,
+    focusTab,
     isValidContactsPayload,
     sleep,
     waitForTabComplete,
@@ -427,6 +493,7 @@
     sendCreateNoteMessage,
     sendGetNotesMessage,
     findExistingContactTab,
+    openOrFocusContactTab,
     withContactTab,
     createSingleHubSpotNote,
     readSingleHubSpotNotes,

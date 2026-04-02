@@ -5,6 +5,7 @@ const DETACHED_POPUP_URL = chrome.runtime.getURL(DETACHED_POPUP_PATH);
 const SETTINGS_KEY = "popupSettings";
 const DEFAULT_LAUNCH_MODE = "attached";
 const OPEN_POPUP_WINDOW_MESSAGE = "OPEN_POPUP_WINDOW";
+const OPEN_OR_FOCUS_CONTACT_TAB_MESSAGE = "OPEN_OR_FOCUS_CONTACT_TAB";
 const OPEN_OR_REUSE_WHATSAPP_TAB_MESSAGE = "OPEN_OR_REUSE_WHATSAPP_TAB";
 const TRACK_CLOUD_TEMPLATE_USE_MESSAGE = "TRACK_CLOUD_TEMPLATE_USE";
 
@@ -120,6 +121,92 @@ async function openOrReuseWhatsappTab(urlInput, sender = null) {
   }
 }
 
+function normalizeContactTabKey(urlInput) {
+  const raw = String(urlInput || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const recordMatch = url.pathname.match(/\/contacts\/(\d+)\/record\/0-1\/(\d+)/i);
+    if (!recordMatch) return "";
+    return `${recordMatch[1]}:${recordMatch[2]}`;
+  } catch (_error) {
+    return "";
+  }
+}
+
+async function openOrFocusContactTab(urlInput, sender = null) {
+  const url = String(urlInput || "").trim();
+  if (!url) {
+    throw new Error("Contact URL is missing.");
+  }
+
+  const targetKey = normalizeContactTabKey(url);
+  if (!targetKey) {
+    throw new Error("Invalid HubSpot contact URL.");
+  }
+
+  const existingTabs = await chrome.tabs.query({ url: ["https://*.hubspot.com/*"] });
+  const existingTab =
+    [...existingTabs]
+      .filter((tab) => normalizeContactTabKey(tab?.url || "") === targetKey)
+      .sort((a, b) => Number(b.lastAccessed || 0) - Number(a.lastAccessed || 0))[0] || null;
+
+  if (existingTab && typeof existingTab.id === "number") {
+    if (typeof existingTab.windowId === "number") {
+      await chrome.windows.update(existingTab.windowId, { focused: true });
+    }
+    await chrome.tabs.update(existingTab.id, { active: true });
+    return;
+  }
+
+  const allWindows = await chrome.windows.getAll();
+  const normalWindows = allWindows.filter((windowInfo) => windowInfo.type === "normal");
+  let senderWindow = null;
+  if (typeof sender?.tab?.windowId === "number") {
+    try {
+      senderWindow = await chrome.windows.get(sender.tab.windowId);
+    } catch (_error) {
+      senderWindow = null;
+    }
+  }
+
+  let targetWindowId;
+  if (senderWindow?.type === "normal" && typeof senderWindow.id === "number") {
+    targetWindowId = senderWindow.id;
+  } else {
+    const lastFocusedTab = (
+      await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true
+      })
+    )[0] || null;
+    const lastFocusedWindow = typeof lastFocusedTab?.windowId === "number" ? allWindows.find((windowInfo) => windowInfo.id === lastFocusedTab.windowId) || null : null;
+
+    targetWindowId =
+      (lastFocusedWindow?.type === "normal" ? lastFocusedWindow.id : undefined) ||
+      normalWindows.find((windowInfo) => windowInfo.focused)?.id ||
+      normalWindows[0]?.id;
+  }
+
+  const createIndex =
+    typeof sender?.tab?.index === "number" &&
+    typeof sender?.tab?.windowId === "number" &&
+    sender.tab.windowId === targetWindowId
+      ? sender.tab.index + 1
+      : undefined;
+
+  await chrome.tabs.create({
+    url,
+    active: true,
+    ...(typeof targetWindowId === "number" ? { windowId: targetWindowId } : {}),
+    ...(typeof createIndex === "number" ? { index: createIndex } : {})
+  });
+
+  if (typeof targetWindowId === "number") {
+    await chrome.windows.update(targetWindowId, { focused: true });
+  }
+}
+
 function normalizeLaunchMode(value) {
   return String(value || "").toLowerCase() === "detached" ? "detached" : "attached";
 }
@@ -171,6 +258,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === OPEN_POPUP_WINDOW_MESSAGE) {
     openOrFocusPopupWindow()
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error || "Unknown error") }));
+    return true;
+  }
+
+  if (message?.type === OPEN_OR_FOCUS_CONTACT_TAB_MESSAGE) {
+    openOrFocusContactTab(message?.url, _sender)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: String(error?.message || error || "Unknown error") }));
     return true;
