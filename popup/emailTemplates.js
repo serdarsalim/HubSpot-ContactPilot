@@ -3,6 +3,7 @@
   const { dom, state, constants } = App;
   const MT = App.messageTypes;
   const timing = App.timing.popup;
+  const isDetachedLaunch = new URLSearchParams(globalThis.location?.search || "").get("mode") === "detached";
   const BODY_EDITOR_ID = "emailTemplateBodyInput";
   const TINYMCE_TOOLBAR_ORDER = [
     "blocks",
@@ -87,6 +88,77 @@
         return a.index - b.index;
       })
       .map((entry) => entry.template);
+  }
+
+  function hasEmailInteraction(url) {
+    return /\binteraction=email\b/i.test(String(url || ""));
+  }
+
+  async function findOpenEmailInteractionTab(recordId, portalId) {
+    const tabs = await chrome.tabs.query({ url: App.constants.HUBSPOT_URL_PATTERNS || ["https://*.hubspot.com/*"] });
+    const cleanRecordId = String(recordId || "").replace(/\D/g, "");
+    const cleanPortalId = String(portalId || "").replace(/\D/g, "");
+    const matches = tabs.filter((tab) => {
+      const url = String(tab?.url || "");
+      if (!hasEmailInteraction(url)) return false;
+      const tabRecordIdMatch = url.match(/\/record\/0-1\/(\d+)/i);
+      const tabPortalIdMatch = url.match(/\/contacts\/(\d+)\/record\/0-1\//i);
+      const tabRecordId = tabRecordIdMatch ? tabRecordIdMatch[1] : "";
+      const tabPortalId = tabPortalIdMatch ? tabPortalIdMatch[1] : "";
+      if (tabRecordId !== cleanRecordId) return false;
+      if (cleanPortalId && tabPortalId !== cleanPortalId) return false;
+      return true;
+    });
+    matches.sort((a, b) => Number(b.lastAccessed || 0) - Number(a.lastAccessed || 0));
+    return matches[0] || null;
+  }
+
+  async function requestContactContextForTabId(tabId) {
+    const attempts = Number(App.timing?.popup?.messageRetryAttempts || 3);
+    const delayMs = Number(App.timing?.popup?.messageRetryDelayMs || 500);
+    let lastError = "";
+
+    try {
+      await App.waitForTabComplete(tabId);
+    } catch (_error) {
+      // Best effort only.
+    }
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {
+          type: MT.GET_ACTIVE_TAB_CONTEXT,
+          countryPrefix: state.settings.countryPrefix,
+          messageText: state.settings.messageTemplate
+        });
+        if (response?.ok) return response;
+        lastError = String(response?.error || "Context inspection failed.");
+      } catch (error) {
+        lastError = String(error || "");
+      }
+      if (attempt < attempts - 1) {
+        await App.sleep(delayMs);
+      }
+    }
+
+    throw new Error(lastError || "Could not reach active contact context.");
+  }
+
+  function mergeContactValues(baseContact, nextContact) {
+    if (!nextContact) return baseContact;
+    if (!baseContact) return nextContact;
+
+    const baseValues = baseContact.values && typeof baseContact.values === "object" ? baseContact.values : {};
+    const nextValues = nextContact.values && typeof nextContact.values === "object" ? nextContact.values : {};
+
+    return {
+      ...baseContact,
+      ...nextContact,
+      values: {
+        ...baseValues,
+        ...nextValues
+      }
+    };
   }
 
   function renderTemplateSourceBadge(template) {
@@ -818,16 +890,6 @@
       return;
     }
 
-    const tokens = App.getContactTokenMap(contact);
-    const escapedHtmlTokens = Object.fromEntries(Object.entries(tokens).map(([tokenKey, tokenValue]) => [tokenKey, App.escapeHtml(tokenValue)]));
-    const subject = App.applyTokens(template.subject, tokens).trim();
-    const bodyHtml = App.applyTokens(template.body, escapedHtmlTokens).trim();
-    const body = htmlToPlainText(bodyHtml);
-    if (!subject && !body && !bodyHtml) {
-      App.setStatus(`Template "${template.name}" is empty.`);
-      return;
-    }
-
     const resolvedKey = String(key || App.contactKey(contact));
     App.setStatus(`Opening ${App.getContactDisplayName(contact)} and applying "${template.name}"...`);
 
@@ -838,21 +900,95 @@
         return;
       }
 
-      const response = await App.withContactTab(
-        recordId,
-        portalId,
-        async (tabId) => {
-          await chrome.tabs.update(tabId, { active: true });
-          await App.sleep(timing.emailComposerReadyDelayMs);
-          return chrome.tabs.sendMessage(tabId, {
-            type: MT.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE,
-            subject,
-            body,
-            bodyHtml
-          });
-        },
-        { allowOpenFresh: true, interaction: "email" }
+      const existingEmailTab = await findOpenEmailInteractionTab(recordId, portalId);
+      const existingContactTab = existingEmailTab || (await App.findExistingContactTab(recordId, portalId));
+
+      let templateContact = contact;
+      if (existingContactTab && typeof existingContactTab.id === "number") {
+        try {
+          const contextResponse = await requestContactContextForTabId(existingContactTab.id);
+          if (contextResponse?.contact) {
+            templateContact = mergeContactValues(contact, contextResponse.contact);
+          }
+        } catch (_error) {
+          // Keep the popup contact data when the page context is not reachable.
+        }
+      }
+
+      const tokens = App.getContactTokenMap(templateContact);
+      const escapedHtmlTokens = Object.fromEntries(
+        Object.entries(tokens).map(([tokenKey, tokenValue]) => [tokenKey, App.escapeHtml(tokenValue)])
       );
+      const subject = App.applyTokens(template.subject, tokens).trim();
+      const bodyHtml = App.applyTokens(template.body, escapedHtmlTokens).trim();
+      const body = htmlToPlainText(bodyHtml);
+      if (!subject && !body && !bodyHtml) {
+        App.setStatus(`Template "${template.name}" is empty.`);
+        return;
+      }
+
+      const sendApplyMessage = (tabId) =>
+        chrome.tabs.sendMessage(tabId, {
+          type: MT.APPLY_EMAIL_TEMPLATE_ON_PAGE,
+          subject,
+          body,
+          bodyHtml
+        });
+
+      let response = null;
+
+      if (isDetachedLaunch) {
+        if (existingEmailTab && typeof existingEmailTab.id === "number") {
+          await chrome.tabs.update(existingEmailTab.id, { active: true });
+          await App.waitForTabComplete(existingEmailTab.id);
+          await App.sleep(timing.emailComposerReadyDelayMs);
+          response = await sendApplyMessage(existingEmailTab.id);
+          if (!response?.ok) {
+            response = await chrome.tabs.sendMessage(existingEmailTab.id, {
+              type: MT.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE,
+              subject,
+              body,
+              bodyHtml
+            });
+          }
+        } else {
+          if (existingContactTab && typeof existingContactTab.id === "number") {
+            const interactionUrl = `${App.buildHubSpotContactUrl(
+              recordId,
+              portalId,
+              App.getHubSpotOrigin(existingContactTab.url || App.state.currentHubSpotOrigin)
+            )}?interaction=email`;
+            await chrome.tabs.update(existingContactTab.id, { url: interactionUrl, active: true });
+            await App.waitForTabComplete(existingContactTab.id);
+            await App.sleep(timing.contactTabPostLoadDelayMs);
+            await App.sleep(timing.emailComposerReadyDelayMs);
+            response = await chrome.tabs.sendMessage(existingContactTab.id, {
+              type: MT.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE,
+              subject,
+              body,
+              bodyHtml
+            });
+          }
+        }
+      }
+
+      if (!response) {
+        response = await App.withContactTab(
+          recordId,
+          portalId,
+          async (tabId) => {
+            await chrome.tabs.update(tabId, { active: true });
+            await App.sleep(timing.emailComposerReadyDelayMs);
+            return chrome.tabs.sendMessage(tabId, {
+              type: MT.OPEN_EMAIL_AND_APPLY_TEMPLATE_ON_PAGE,
+              subject,
+              body,
+              bodyHtml
+            });
+          },
+          { allowOpenFresh: true, interaction: "email" }
+        );
+      }
 
       if (!response?.ok) {
         App.setStatus(response?.error || "Opened contact, but could not apply email template.");
