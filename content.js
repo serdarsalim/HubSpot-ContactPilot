@@ -2720,10 +2720,40 @@
         apiToken: cleanText(item?.apiToken || ""),
         apiBaseUrl: cleanText(item?.apiBaseUrl || ""),
         organizationName: cleanText(item?.organizationName || ""),
-        organizationSlug: cleanText(item?.organizationSlug || "")
+        organizationSlug: cleanText(item?.organizationSlug || ""),
+        templatesPaused: item?.templatesPaused === true
       });
     }
     return normalized;
+  }
+
+  function isInlinePlaceholderTemplate(template, kind) {
+    const templateId = cleanText(template?.id || "");
+    const templateName = cleanText(template?.name || "");
+    const normalizedKind = cleanText(kind || "");
+
+    if (templateId === "template_default" || templateId === "wa_template_default" || templateId === "note_template_default") {
+      return true;
+    }
+
+    if (templateName !== "template 1") return false;
+
+    if (normalizedKind === "email") {
+      return cleanText(template?.subject || "") === "" && cleanText(template?.body || "") === "hi [name],";
+    }
+    if (normalizedKind === "whatsapp") {
+      return cleanText(template?.body || "") === "hi [name],";
+    }
+    if (normalizedKind === "note") {
+      return cleanText(template?.body || "") === "";
+    }
+
+    return false;
+  }
+
+  function filterInlineTemplates(templates, kind) {
+    const source = Array.isArray(templates) ? templates : [];
+    return source.filter((template) => !isInlinePlaceholderTemplate(template, kind));
   }
 
   function getInlineCloudCacheKeys(organizationIdInput) {
@@ -3217,6 +3247,7 @@
     inlineQuickActionsState.cloudAuthList = cloudAuthList;
     const cacheKeys = [];
     for (const auth of cloudAuthList) {
+      if (auth?.templatesPaused === true) continue;
       const keys = getInlineCloudCacheKeys(auth.organizationId);
       if (!keys) continue;
       cacheKeys.push(keys.emailKey, keys.whatsappKey, keys.noteKey);
@@ -3227,6 +3258,7 @@
     const cloudWhatsappTemplates = [];
     const cloudNoteTemplates = [];
     for (const auth of cloudAuthList) {
+      if (auth?.templatesPaused === true) continue;
       const keys = getInlineCloudCacheKeys(auth.organizationId);
       if (!keys) continue;
       cloudEmailTemplates.push(...normalizeInlineCloudEmailTemplates(cloudCache?.[keys.emailKey], auth.organizationId));
@@ -3235,15 +3267,15 @@
     }
 
     inlineQuickActionsState.templates.email = mergeInlineTemplates(
-      normalizeInlineEmailTemplates(local?.[EMAIL_TEMPLATES_LOCAL_KEY]),
+      filterInlineTemplates(normalizeInlineEmailTemplates(local?.[EMAIL_TEMPLATES_LOCAL_KEY]), "email"),
       cloudEmailTemplates
     );
     inlineQuickActionsState.templates.note = mergeInlineTemplates(
-      normalizeInlineNoteTemplates(local?.[NOTE_TEMPLATES_LOCAL_KEY]),
+      filterInlineTemplates(normalizeInlineNoteTemplates(local?.[NOTE_TEMPLATES_LOCAL_KEY]), "note"),
       cloudNoteTemplates
     );
     inlineQuickActionsState.templates.whatsapp = mergeInlineTemplates(
-      normalizeInlineWhatsappTemplates(local?.[WHATSAPP_TEMPLATES_LOCAL_KEY]),
+      filterInlineTemplates(normalizeInlineWhatsappTemplates(local?.[WHATSAPP_TEMPLATES_LOCAL_KEY]), "whatsapp"),
       cloudWhatsappTemplates
     );
     inlineQuickActionsState.templateUsageByContact = normalizeInlineTemplateUsageMap(local?.[TEMPLATE_USAGE_LOCAL_KEY]);
