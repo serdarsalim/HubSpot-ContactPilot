@@ -2454,6 +2454,61 @@
     return true;
   }
 
+  function shouldPreserveEmailBodyNode(node) {
+    if (!(node instanceof Node)) return false;
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+
+    const element = node;
+    if (!(element instanceof Element)) return false;
+    if (element.classList.contains("hs-signature")) return true;
+    if (element.getAttribute("contenteditable") === "false") return true;
+
+    const hint = cleanText(
+      [
+        element.className || "",
+        element.getAttribute("data-test-id") || "",
+        element.getAttribute("data-testid") || "",
+        element.getAttribute("data-selenium-test") || "",
+        element.getAttribute("aria-label") || "",
+        element.getAttribute("title") || ""
+      ].join(" ")
+    ).toLowerCase();
+
+    return (
+      hint.includes("attachment") ||
+      hint.includes("attach") ||
+      hint.includes("file") ||
+      hint.includes("document") ||
+      hint.includes("image") ||
+      hint.includes("preview")
+    );
+  }
+
+  function clearEditorContentPreservingEmbeds(editor) {
+    const target = resolveEditorTarget(editor);
+    if (!target) return false;
+
+    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+      return clearEditorContent(editor);
+    }
+
+    const root = target.closest(".ProseMirror") || target;
+    if (!(root instanceof Element)) return false;
+
+    const preservedNodes = [];
+    for (const child of Array.from(root.childNodes)) {
+      if (shouldPreserveEmailBodyNode(child)) {
+        preservedNodes.push(child.cloneNode(true));
+      }
+    }
+
+    if (root.innerHTML || preservedNodes.length) {
+      root.replaceChildren(...preservedNodes);
+      dispatchInputLikeEvents(root);
+    }
+    return true;
+  }
+
   async function applyEmailTemplateOnPage(subject, body, bodyHtml = "") {
     const dialog = findOpenEmailDialog();
     if (!dialog) {
@@ -2477,7 +2532,7 @@
       for (let attempt = 0; attempt < 6 && !bodyApplied; attempt += 1) {
         const bodyEditors = getBodyEditorCandidates(dialog);
         for (const bodyEditor of bodyEditors) {
-          clearEditorContent(bodyEditor);
+          clearEditorContentPreservingEmbeds(bodyEditor);
           if (prependEditorHtml(bodyEditor, bodyInsertHtml)) {
             bodyApplied = true;
             break;
@@ -2490,7 +2545,7 @@
         if (attempt === 2) {
           const fallbackEditor = findBodyEditor(dialog);
           if (fallbackEditor) {
-            clearEditorContent(fallbackEditor);
+            clearEditorContentPreservingEmbeds(fallbackEditor);
           }
           if (fallbackEditor && prependEditorHtml(fallbackEditor, bodyInsertHtml)) {
             bodyApplied = true;
