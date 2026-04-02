@@ -40,6 +40,7 @@
   const INLINE_QUICK_ACTIONS_ROOT_ID = "cpInlineQuickActionsRoot";
   const PENDING_INLINE_EMAIL_APPLY_SESSION_KEY = "cpPendingInlineEmailApply";
   const PENDING_INLINE_NOTE_APPLY_SESSION_KEY = "cpPendingInlineNoteApply";
+  const PENDING_INLINE_TASK_OPEN_SESSION_KEY = "cpPendingInlineTaskOpen";
   const INLINE_QUICK_ACTIONS_STYLE_ID = "cpInlineQuickActionsStyle";
   const INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY = "popupInlineQuickActionsPosition";
   const INLINE_QUICK_ACTIONS_CHECK_INTERVAL_MS = 900;
@@ -1588,6 +1589,33 @@
     }
   }
 
+  function savePendingInlineTaskOpen(payload) {
+    try {
+      window.sessionStorage?.setItem(PENDING_INLINE_TASK_OPEN_SESSION_KEY, JSON.stringify(payload || {}));
+    } catch (_error) {
+      // Ignore storage failures and fall back to direct page automation only.
+    }
+  }
+
+  function loadPendingInlineTaskOpen() {
+    try {
+      const raw = window.sessionStorage?.getItem(PENDING_INLINE_TASK_OPEN_SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function clearPendingInlineTaskOpen() {
+    try {
+      window.sessionStorage?.removeItem(PENDING_INLINE_TASK_OPEN_SESSION_KEY);
+    } catch (_error) {
+      // Ignore storage failures.
+    }
+  }
+
   function isLikelyPropertyFieldHint(hint) {
     const text = String(hint || "").toLowerCase();
     if (!text) return false;
@@ -2516,6 +2544,7 @@
     busy: false,
     pendingEmailApplyRunning: false,
     pendingNoteApplyRunning: false,
+    pendingTaskOpenRunning: false,
     searchQuery: "",
     lastUrl: "",
     watcherTimerId: 0,
@@ -3851,7 +3880,9 @@
   }
 
   function getCreateTaskTriggers() {
-    const candidates = Array.from(document.querySelectorAll("button, [role='button'], a")).filter((el) => isVisible(el));
+    const candidates = Array.from(document.querySelectorAll("button, [role='button'], a")).filter(
+      (el) => isVisible(el) && !isInlineQuickActionsElement(el)
+    );
     const matches = [];
 
     for (const el of candidates) {
@@ -3920,6 +3951,7 @@
 
   async function openTaskComposerOnPage() {
     if (hasTaskComposerOpen()) {
+      focusTaskTitleField();
       return { ok: true };
     }
 
@@ -3940,6 +3972,63 @@
     }
 
     throw new Error("Could not open the HubSpot task composer.");
+  }
+
+  async function openInlineTaskComposer() {
+    if (hasTaskComposerOpen()) {
+      focusTaskTitleField();
+      return;
+    }
+
+    const interactionUrl = buildCurrentContactInteractionUrl("task");
+    if (!interactionUrl) {
+      await openTaskComposerOnPage();
+      return;
+    }
+
+    const context = getInlineContactContextOrThrow();
+    savePendingInlineTaskOpen({
+      recordId: context.recordId,
+      createdAt: Date.now()
+    });
+    location.assign(interactionUrl);
+  }
+
+  async function runPendingInlineTaskOpenIfNeeded() {
+    if (inlineQuickActionsState.pendingTaskOpenRunning) return;
+
+    const pending = loadPendingInlineTaskOpen();
+    if (!pending) return;
+
+    const currentRecordId = getRecordIdFromPath();
+    if (!currentRecordId || String(pending.recordId || "") !== String(currentRecordId)) {
+      clearPendingInlineTaskOpen();
+      return;
+    }
+
+    if (Date.now() - Number(pending.createdAt || 0) > 2 * 60 * 1000) {
+      clearPendingInlineTaskOpen();
+      return;
+    }
+
+    inlineQuickActionsState.pendingTaskOpenRunning = true;
+    try {
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        if (hasTaskComposerOpen()) break;
+        await sleep(180);
+      }
+
+      if (!hasTaskComposerOpen()) {
+        await openTaskComposerOnPage();
+      } else {
+        focusTaskTitleField();
+      }
+      clearPendingInlineTaskOpen();
+    } catch (_error) {
+      clearPendingInlineTaskOpen();
+    } finally {
+      inlineQuickActionsState.pendingTaskOpenRunning = false;
+    }
   }
 
   async function handleInlineTemplateSelection(kind, templateId) {
@@ -3988,7 +4077,7 @@
       setInlineQuickActionsBusy(true);
       setInlineQuickActionsStatus("");
       try {
-        await openTaskComposerOnPage();
+        await openInlineTaskComposer();
         renderInlineQuickActionsPanel("");
         setInlineQuickActionsStatus("");
       } catch (error) {
@@ -4187,6 +4276,7 @@
     void refreshInlineQuickActionsData();
     void runPendingInlineEmailApplyIfNeeded();
     void runPendingInlineNoteApplyIfNeeded();
+    void runPendingInlineTaskOpenIfNeeded();
   }
 
   function handleInlineQuickActionsViewportResize() {
