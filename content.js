@@ -2381,8 +2381,11 @@
       applied = ownerDoc.execCommand("insertHTML", false, `${insertHtml}<p><br></p>`);
     }
     if (!applied) {
+      const sig = target.querySelector(".hs-signature");
+      if (sig) sig.remove();
       const currentHtml = String(target.innerHTML || "");
       target.innerHTML = currentHtml ? `${insertHtml}<p><br></p>${currentHtml}` : insertHtml;
+      if (sig) target.appendChild(sig);
       applied = true;
     }
     if (!applied) return false;
