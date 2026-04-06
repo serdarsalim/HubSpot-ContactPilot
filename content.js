@@ -2484,15 +2484,17 @@
     const root = target.closest(".ProseMirror") || target;
     if (!(root instanceof Element)) return false;
 
-    const preservedNodes = [];
+    const nodesToRemove = [];
     for (const child of Array.from(root.childNodes)) {
-      if (shouldPreserveEmailBodyNode(child)) {
-        preservedNodes.push(child.cloneNode(true));
+      if (!shouldPreserveEmailBodyNode(child)) {
+        nodesToRemove.push(child);
       }
     }
 
-    if (root.innerHTML || preservedNodes.length) {
-      root.replaceChildren(...preservedNodes);
+    if (nodesToRemove.length) {
+      for (const child of nodesToRemove) {
+        root.removeChild(child);
+      }
       dispatchInputLikeEvents(root);
     }
     return true;
