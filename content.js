@@ -41,6 +41,7 @@
   const INLINE_QUICK_ACTIONS_ROOT_ID = "cpInlineQuickActionsRoot";
   const PENDING_INLINE_EMAIL_APPLY_SESSION_KEY = "cpPendingInlineEmailApply";
   const PENDING_INLINE_NOTE_APPLY_SESSION_KEY = "cpPendingInlineNoteApply";
+  const PENDING_INLINE_NOTE_OPEN_SESSION_KEY = "cpPendingInlineNoteOpen";
   const PENDING_INLINE_TASK_OPEN_SESSION_KEY = "cpPendingInlineTaskOpen";
   const INLINE_QUICK_ACTIONS_STYLE_ID = "cpInlineQuickActionsStyle";
   const INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY = "popupInlineQuickActionsPosition";
@@ -1614,6 +1615,33 @@
     }
   }
 
+  function savePendingInlineNoteOpen(payload) {
+    try {
+      window.sessionStorage?.setItem(PENDING_INLINE_NOTE_OPEN_SESSION_KEY, JSON.stringify(payload || {}));
+    } catch (_error) {
+      // Ignore storage failures and fall back to direct page automation only.
+    }
+  }
+
+  function loadPendingInlineNoteOpen() {
+    try {
+      const raw = window.sessionStorage?.getItem(PENDING_INLINE_NOTE_OPEN_SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function clearPendingInlineNoteOpen() {
+    try {
+      window.sessionStorage?.removeItem(PENDING_INLINE_NOTE_OPEN_SESSION_KEY);
+    } catch (_error) {
+      // Ignore storage failures.
+    }
+  }
+
   function savePendingInlineTaskOpen(payload) {
     try {
       window.sessionStorage?.setItem(PENDING_INLINE_TASK_OPEN_SESSION_KEY, JSON.stringify(payload || {}));
@@ -1889,6 +1917,42 @@
     return bestScore >= 10 ? best : null;
   }
 
+  function focusNoteEditor(editor) {
+    if (!(editor instanceof Element)) return false;
+    editor.focus();
+    if (editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement) {
+      try {
+        const length = String(editor.value || "").length;
+        editor.setSelectionRange(length, length);
+      } catch (_error) {
+        // Ignore selection failures.
+      }
+    }
+    return true;
+  }
+
+  async function openNoteComposerOnPage() {
+    let editor = findNoteEditor();
+    if (editor && getNoteComposerRoot(editor)) {
+      focusNoteEditor(editor);
+      return { ok: true };
+    }
+
+    for (let i = 0; i < TIMING.noteComposerOpenAttempts; i += 1) {
+      editor = findNoteEditor();
+      if (editor && getNoteComposerRoot(editor)) {
+        focusNoteEditor(editor);
+        return { ok: true };
+      }
+
+      if (i === 0 || i % 3 === 0) clickActivitiesTab();
+      if (i === 1 || i % 3 === 1) clickNotesActivityTab();
+      clickNoteTrigger();
+      await sleep(TIMING.noteComposerOpenDelayMs);
+    }
+
+    throw new Error("Could not open the HubSpot note composer.");
+  }
 
   async function createNoteOnPage(noteBody, noteHtml = "") {
     const richHtml = toInsertableHtml(noteHtml || noteBody);
@@ -2618,6 +2682,7 @@
     busy: false,
     pendingEmailApplyRunning: false,
     pendingNoteApplyRunning: false,
+    pendingNoteOpenRunning: false,
     pendingTaskOpenRunning: false,
     searchQuery: "",
     lastUrl: "",
@@ -3319,38 +3384,20 @@
         overflow: hidden;
       }
 
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 7px;
-        font-size: 13px;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        padding: 9px 10px 5px;
-        cursor: grab;
-        user-select: none;
-        color: #402a68;
-        background: #f3ebff;
-        box-shadow:
-          0 1px 0 rgba(100, 67, 154, 0.08);
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-brand-name {
-        line-height: 1;
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-head {
-        cursor: grabbing;
-      }
-
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
-        padding: 2px 10px 9px;
+        padding: 8px 10px 8px;
         background: #f3ebff;
+        cursor: grab;
+        user-select: none;
+        box-shadow: 0 1px 0 rgba(100, 67, 154, 0.08);
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-actions-row {
+        cursor: grabbing;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-divider {
@@ -3424,11 +3471,15 @@
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         padding: 8px 8px 4px;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input {
         width: 100%;
+        min-width: 0;
         border: 1px solid rgba(123, 99, 161, 0.26);
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.92);
@@ -3443,6 +3494,40 @@
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input:focus {
         border-color: rgba(123, 99, 161, 0.48);
         box-shadow: 0 0 0 3px rgba(137, 96, 196, 0.12);
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        flex-shrink: 0;
+        border: 1px solid rgba(123, 99, 161, 0.22);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #5a437d;
+        cursor: pointer;
+        padding: 0;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn svg {
+        width: 15px;
+        height: 15px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn:hover {
+        background: rgba(137, 96, 196, 0.1);
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn:disabled {
+        opacity: 0.6;
+        cursor: wait;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn {
@@ -3529,11 +3614,6 @@
         box-shadow: 0 8px 24px rgba(18, 8, 32, 0.42) !important;
       }
 
-      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
-        color: #f7f1ff !important;
-        background: #473668 !important;
-      }
-
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row {
         background: #473668 !important;
       }
@@ -3568,6 +3648,16 @@
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input:focus {
         border-color: rgba(198, 173, 232, 0.46) !important;
         box-shadow: 0 0 0 3px rgba(179, 145, 226, 0.14) !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn {
+        background: rgba(43, 31, 63, 0.92) !important;
+        border-color: rgba(198, 173, 232, 0.22) !important;
+        color: #efe6fb !important;
+      }
+
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn:hover {
+        background: rgba(179, 145, 226, 0.18) !important;
       }
 
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-panel::-webkit-scrollbar-thumb {
@@ -3611,6 +3701,10 @@
     return "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 4c4.7 0 8.5 3.4 8.5 7.5S16.7 19 12 19c-1 0-2-.2-2.9-.5L4 20l1.4-3.8C4.5 14.9 4 13.2 4 11.5 4 7.4 7.8 4 12 4z'></path><circle cx='9' cy='11.5' r='0.9'></circle><circle cx='12' cy='11.5' r='0.9'></circle><circle cx='15' cy='11.5' r='0.9'></circle></svg>";
   }
 
+  function inlineLaunchIcon() {
+    return "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M14 5h5v5'></path><path d='M10 14 19 5'></path><path d='M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5'></path></svg>";
+  }
+
   function setInlineQuickActionsStatus(message, tone = "") {
     if (!inlineQuickActionsState.statusEl) return;
     inlineQuickActionsState.statusEl.textContent = String(message || "");
@@ -3634,6 +3728,39 @@
       button.classList.toggle("active", kind === inlineQuickActionsState.activeKind);
       button.disabled = inlineQuickActionsState.busy;
     });
+    inlineQuickActionsState.rootEl.querySelectorAll(".cp-inline-launch-btn").forEach((button) => {
+      button.disabled = inlineQuickActionsState.busy;
+    });
+  }
+
+  function getInlineSearchLaunchMeta(kind) {
+    const key = String(kind || "").toLowerCase();
+    if (key === "email") {
+      return { title: "Open email composer", ariaLabel: "Open email composer" };
+    }
+    if (key === "whatsapp") {
+      return { title: "Open WhatsApp", ariaLabel: "Open WhatsApp" };
+    }
+    if (key === "note") {
+      return { title: "Open note composer", ariaLabel: "Open note composer" };
+    }
+    return null;
+  }
+
+  function renderInlineSearchRow(kind) {
+    const launchMeta = getInlineSearchLaunchMeta(kind);
+    return (
+      `<div class='cp-inline-search'>` +
+      `<input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
+        inlineQuickActionsState.searchQuery || ""
+      )}'>` +
+      (launchMeta
+        ? `<button type='button' class='cp-inline-launch-btn' data-inline-open-kind='${escapeHtml(kind)}' title='${escapeHtml(
+            launchMeta.title
+          )}' aria-label='${escapeHtml(launchMeta.ariaLabel)}'>${inlineLaunchIcon()}</button>`
+        : "") +
+      `</div>`
+    );
   }
 
   function renderInlineQuickActionsPanel(kind = "") {
@@ -3660,16 +3787,12 @@
     }
     if (!matchingTemplates.length) {
       inlineQuickActionsState.panelEl.innerHTML =
-        `<div class='cp-inline-search'><input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
-          inlineQuickActionsState.searchQuery || ""
-        )}'></div>` + "<div class='cp-inline-empty'>No templates match that title.</div>";
+        renderInlineSearchRow(inlineQuickActionsState.activeKind) + "<div class='cp-inline-empty'>No templates match that title.</div>";
       return;
     }
 
     inlineQuickActionsState.panelEl.innerHTML =
-      `<div class='cp-inline-search'><input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
-        inlineQuickActionsState.searchQuery || ""
-      )}'></div>` +
+      renderInlineSearchRow(inlineQuickActionsState.activeKind) +
       matchingTemplates
       .map((template) => {
         const isUsed = hasInlineTemplateBeenUsed(inlineQuickActionsState.activeKind, template.id);
@@ -3827,6 +3950,55 @@
       clearPendingInlineNoteApply();
     } finally {
       inlineQuickActionsState.pendingNoteApplyRunning = false;
+    }
+  }
+
+  async function openInlineNoteComposer() {
+    const existingEditor = findNoteEditor();
+    if (existingEditor && getNoteComposerRoot(existingEditor)) {
+      focusNoteEditor(existingEditor);
+      return;
+    }
+
+    const interactionUrl = buildCurrentContactInteractionUrl("note");
+    if (!interactionUrl) {
+      await openNoteComposerOnPage();
+      return;
+    }
+
+    const context = getInlineContactContextOrThrow();
+    savePendingInlineNoteOpen({
+      recordId: context.recordId,
+      createdAt: Date.now()
+    });
+    location.assign(interactionUrl);
+  }
+
+  async function runPendingInlineNoteOpenIfNeeded() {
+    if (inlineQuickActionsState.pendingNoteOpenRunning) return;
+
+    const pending = loadPendingInlineNoteOpen();
+    if (!pending) return;
+
+    const currentRecordId = getRecordIdFromPath();
+    if (!currentRecordId || String(pending.recordId || "") !== String(currentRecordId)) {
+      clearPendingInlineNoteOpen();
+      return;
+    }
+
+    if (Date.now() - Number(pending.createdAt || 0) > 2 * 60 * 1000) {
+      clearPendingInlineNoteOpen();
+      return;
+    }
+
+    inlineQuickActionsState.pendingNoteOpenRunning = true;
+    try {
+      await openNoteComposerOnPage();
+      clearPendingInlineNoteOpen();
+    } catch (_error) {
+      clearPendingInlineNoteOpen();
+    } finally {
+      inlineQuickActionsState.pendingNoteOpenRunning = false;
     }
   }
 
@@ -4101,6 +4273,39 @@
     location.assign(interactionUrl);
   }
 
+  async function openInlineQuickActionTarget(kind) {
+    const targetKind = String(kind || "").toLowerCase();
+    if (!targetKind) return;
+
+    if (targetKind === "email") {
+      const interactionUrl = buildCurrentContactInteractionUrl("email");
+      if (!interactionUrl) {
+        throw new Error("Could not open the HubSpot Email composer.");
+      }
+      location.assign(interactionUrl);
+      return;
+    }
+
+    if (targetKind === "whatsapp") {
+      const context = getInlineContactContextOrThrow();
+      const phoneDigits =
+        String(context?.contact?.phoneDigits || "").replace(/\D/g, "") ||
+        String(normalizePhone(context?.contact?.values?.phone || "", inlineQuickActionsState.countryPrefix) || "").replace(/\D/g, "");
+      if (!phoneDigits) throw new Error("No phone number found on this contact.");
+      await openOrReuseWhatsappTab(`https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number`);
+      return;
+    }
+
+    if (targetKind === "note") {
+      await openInlineNoteComposer();
+      return;
+    }
+
+    if (targetKind === "task") {
+      await openInlineTaskComposer();
+    }
+  }
+
   async function runPendingInlineTaskOpenIfNeeded() {
     if (inlineQuickActionsState.pendingTaskOpenRunning) return;
 
@@ -4207,9 +4412,35 @@
     renderInlineQuickActionsPanel(selectedKind);
   }
 
+  async function handleInlineQuickOpen(kind) {
+    if (inlineQuickActionsState.busy) return;
+    const selectedKind = String(kind || "").toLowerCase();
+    if (!selectedKind) return;
+
+    setInlineQuickActionsBusy(true);
+    setInlineQuickActionsStatus("");
+    try {
+      await openInlineQuickActionTarget(selectedKind);
+      renderInlineQuickActionsPanel("");
+      setInlineQuickActionsStatus("");
+    } catch (error) {
+      const reason = cleanText(String(error?.message || error || "Action failed."));
+      setInlineQuickActionsStatus(reason || "Action failed.", "error");
+    } finally {
+      setInlineQuickActionsBusy(false);
+    }
+  }
+
   function handleInlineRootClick(event) {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
+
+    const quickOpenButton = target.closest("[data-inline-open-kind]");
+    if (quickOpenButton) {
+      const kind = String(quickOpenButton.getAttribute("data-inline-open-kind") || "");
+      void handleInlineQuickOpen(kind);
+      return;
+    }
 
     const actionButton = target.closest(".cp-inline-action-btn");
     if (actionButton) {
@@ -4292,8 +4523,9 @@
     if (event.button !== 0) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
-    const handle = target.closest(".cp-inline-head");
+    const handle = target.closest(".cp-inline-actions-row");
     if (!handle || !inlineQuickActionsState.rootEl) return;
+    if (target.closest(".cp-inline-action-btn")) return;
 
     const rect = inlineQuickActionsState.rootEl.getBoundingClientRect();
     inlineQuickActionsState.dragging.active = true;
@@ -4327,7 +4559,6 @@
     rootEl.dataset.dragging = "0";
     rootEl.innerHTML = `
       <div class='cp-inline-card'>
-        <div class='cp-inline-head'><span class='cp-inline-brand-name'>Contact Point</span></div>
         <div class='cp-inline-actions-row'>
           <button type='button' class='cp-inline-action-btn' data-kind='whatsapp' aria-label='WhatsApp templates' title='WhatsApp templates'>${inlineActionIcon("whatsapp")}</button>
           <span class='cp-inline-divider'>|</span>
@@ -4383,6 +4614,7 @@
     void refreshInlineQuickActionsData();
     void runPendingInlineEmailApplyIfNeeded();
     void runPendingInlineNoteApplyIfNeeded();
+    void runPendingInlineNoteOpenIfNeeded();
     void runPendingInlineTaskOpenIfNeeded();
   }
 
