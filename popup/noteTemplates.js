@@ -34,6 +34,26 @@
     }
   }
 
+  function htmlToPlainText(value) {
+    const raw = String(value || "");
+    if (!raw) return "";
+    if (!/<[a-z][\s\S]*>/i.test(raw)) {
+      return raw
+        .replace(/\r\n/g, "\n")
+        .replace(/\s+\n/g, "\n")
+        .replace(/\n\s+/g, "\n")
+        .trim();
+    }
+
+    const node = document.createElement("div");
+    node.innerHTML = raw;
+    return String(node.textContent || "")
+      .replace(/\s+\n/g, "\n")
+      .replace(/\n\s+/g, "\n")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   async function saveNoteTemplateDraftNow(force = false) {
     if (autosaveInFlight) {
       autosaveQueued = true;
@@ -362,7 +382,7 @@
     const templates = getMergedNoteTemplates();
     const selectedTemplate = templates.find((template) => template.id === selectedId) || null;
     if (!selectedTemplate) return;
-    dom.notesTextInput.value = String(selectedTemplate.body || "").trim();
+    dom.notesTextInput.value = htmlToPlainText(selectedTemplate.body || "");
   }
 
   Object.assign(App, {

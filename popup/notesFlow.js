@@ -2,6 +2,26 @@
   const App = window.PopupApp;
   const { dom, state } = App;
 
+  function htmlToPlainText(value) {
+    const raw = String(value || "");
+    if (!raw) return "";
+    if (!/<[a-z][\s\S]*>/i.test(raw)) {
+      return raw
+        .replace(/\r\n/g, "\n")
+        .replace(/\s+\n/g, "\n")
+        .replace(/\n\s+/g, "\n")
+        .trim();
+    }
+
+    const node = document.createElement("div");
+    node.innerHTML = raw;
+    return String(node.textContent || "")
+      .replace(/\s+\n/g, "\n")
+      .replace(/\n\s+/g, "\n")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function renderNotesHistory() {
     if (!dom.notesListEl) return;
 
@@ -201,7 +221,11 @@
 
     let result = null;
     try {
-      result = await App.createHubSpotNotes([recordId], text);
+      const selectedTemplateBody = String(selectedTemplate?.body || "").trim();
+      const selectedTemplatePlainText = htmlToPlainText(selectedTemplateBody);
+      const noteHtml =
+        selectedTemplate && selectedTemplateBody && text === selectedTemplatePlainText ? selectedTemplateBody : "";
+      result = await App.createHubSpotNotes([recordId], text, noteHtml);
     } finally {
       setNotesDialogBusy(false);
     }

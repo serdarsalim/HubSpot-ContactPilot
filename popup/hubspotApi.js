@@ -201,13 +201,14 @@
     }
   }
 
-  async function sendCreateNoteMessage(tabId, noteBody) {
+  async function sendCreateNoteMessage(tabId, noteBody, noteHtml = "") {
     let lastError = "";
     for (let attempt = 0; attempt < timing.messageRetryAttempts; attempt += 1) {
       try {
         const response = await chrome.tabs.sendMessage(tabId, {
           type: MT.CREATE_NOTE_ON_PAGE,
-          noteBody
+          noteBody,
+          noteHtml
         });
         if (response?.ok) return response;
         lastError = String(response?.error || "Unknown note creation error.");
@@ -404,9 +405,9 @@
     return getPortalId(hubSpotTab);
   }
 
-  async function createSingleHubSpotNote(recordId, noteBody, portalId) {
+  async function createSingleHubSpotNote(recordId, noteBody, portalId, noteHtml = "") {
     return withContactTab(recordId, portalId, async (tabId) => {
-      await sendCreateNoteMessage(tabId, noteBody);
+      await sendCreateNoteMessage(tabId, noteBody, noteHtml);
       return { ok: true };
     }, { allowOpenFresh: true, interaction: "note" });
   }
@@ -418,7 +419,7 @@
     }, { allowOpenFresh: false });
   }
 
-  async function createHubSpotNotes(recordIds, noteBody) {
+  async function createHubSpotNotes(recordIds, noteBody, noteHtml = "") {
     const uniqueRecordIds = [
       ...new Set(
         (Array.isArray(recordIds) ? recordIds : [])
@@ -436,7 +437,7 @@
         if (!portalId) {
           throw new Error("Could not detect HubSpot portal ID.");
         }
-        await createSingleHubSpotNote(recordId, noteBody, portalId);
+        await createSingleHubSpotNote(recordId, noteBody, portalId, noteHtml);
         created += 1;
       } catch (error) {
         failed.push({ recordId, error: String(error) });

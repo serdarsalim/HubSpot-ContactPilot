@@ -1813,9 +1813,10 @@
     return false;
   }
 
-  function setEditorText(editor, noteBody) {
-    const text = String(noteBody || "").trim();
-    if (!text) return;
+  function setEditorContent(editor, noteBody, noteHtml = "") {
+    const richHtml = toInsertableHtml(noteHtml || noteBody);
+    const text = htmlToPlainText(richHtml || noteBody).trim();
+    if (!text && !richHtml) return false;
 
     editor.focus();
 
@@ -1823,12 +1824,17 @@
       editor.value = text;
       editor.dispatchEvent(new Event("input", { bubbles: true }));
       editor.dispatchEvent(new Event("change", { bubbles: true }));
-      return;
+      return true;
+    }
+
+    if (richHtml && prependEditorHtml(editor, richHtml)) {
+      return true;
     }
 
     editor.textContent = text;
     editor.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
     editor.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
   }
 
   function findCreateNoteButton(editor) {
@@ -1869,8 +1875,9 @@
   }
 
 
-  async function createNoteOnPage(noteBody) {
-    const text = cleanText(noteBody || "");
+  async function createNoteOnPage(noteBody, noteHtml = "") {
+    const richHtml = toInsertableHtml(noteHtml || noteBody);
+    const text = htmlToPlainText(richHtml || noteBody).trim();
     if (!text) throw new Error("Note text is empty.");
 
     let editor = null;
@@ -1889,7 +1896,10 @@
       throw new Error("Could not find note editor on contact page.");
     }
 
-    setEditorText(editor, text);
+    clearEditorContent(editor);
+    if (!setEditorContent(editor, text, richHtml)) {
+      throw new Error("Could not write content into the note field.");
+    }
     await sleep(TIMING.noteEditorSettleDelayMs);
 
     const createNoteButton = findCreateNoteButton(editor);
@@ -3746,25 +3756,26 @@
   async function applyInlineNoteTemplate(template) {
     const context = getInlineContactContextOrThrow();
     const tokens = buildInlineTemplateTokens(context);
-    const filledBody = applyInlineTemplateTokens(template?.body || "", tokens).trim();
-    const noteBody = htmlToPlainText(filledBody) || filledBody;
+    const filledBodyHtml = applyInlineTemplateTokens(template?.body || "", tokens).trim();
+    const noteBody = htmlToPlainText(filledBodyHtml) || filledBodyHtml;
     if (!noteBody) throw new Error("Selected note template is empty.");
 
     const existingEditor = findNoteEditor();
     if (existingEditor && getNoteComposerRoot(existingEditor)) {
-      await createNoteOnPage(noteBody);
+      await createNoteOnPage(noteBody, filledBodyHtml);
       return;
     }
 
     const interactionUrl = buildCurrentContactInteractionUrl("note");
     if (!interactionUrl) {
-      await createNoteOnPage(noteBody);
+      await createNoteOnPage(noteBody, filledBodyHtml);
       return;
     }
 
     savePendingInlineNoteApply({
       recordId: context.recordId,
       noteBody,
+      noteHtml: filledBodyHtml,
       createdAt: Date.now()
     });
     location.assign(interactionUrl);
@@ -3795,7 +3806,7 @@
         await sleep(TIMING.noteComposerOpenDelayMs);
       }
 
-      await createNoteOnPage(String(pending.noteBody || ""));
+      await createNoteOnPage(String(pending.noteBody || ""), String(pending.noteHtml || ""));
       clearPendingInlineNoteApply();
     } catch (_error) {
       clearPendingInlineNoteApply();
@@ -4417,7 +4428,8 @@
 
     if (message.type === MESSAGE_TYPES.CREATE_NOTE_ON_PAGE) {
       const noteBody = String(message.noteBody || "");
-      createNoteOnPage(noteBody)
+      const noteHtml = String(message.noteHtml || "");
+      createNoteOnPage(noteBody, noteHtml)
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error) }));
       return true;
