@@ -4179,7 +4179,7 @@
         markInlineTemplateUsed("whatsapp", template.id);
         void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
-        renderInlineQuickActionsPanel("");
+        renderInlineQuickActionsPanel("whatsapp");
       }
     } catch (error) {
       const reason = cleanText(String(error?.message || error || "Action failed."));
