@@ -4175,18 +4175,20 @@
         markInlineTemplateUsed("email", template.id);
         void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
+        renderInlineQuickActionsPanel("email");
       } else if (kind === "note") {
         await applyInlineNoteTemplate(template);
         markInlineTemplateUsed("note", template.id);
         void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
+        renderInlineQuickActionsPanel("");
       } else if (kind === "whatsapp") {
         await applyInlineWhatsappTemplate(template);
         markInlineTemplateUsed("whatsapp", template.id);
         void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
+        renderInlineQuickActionsPanel("");
       }
-      renderInlineQuickActionsPanel("");
     } catch (error) {
       const reason = cleanText(String(error?.message || error || "Action failed."));
       setInlineQuickActionsStatus(reason || "Action failed.", "error");
