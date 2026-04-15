@@ -40,9 +40,7 @@
   const CLOUD_TEMPLATE_ID_PREFIX = "cloud_";
   const INLINE_QUICK_ACTIONS_ROOT_ID = "cpInlineQuickActionsRoot";
   const PENDING_INLINE_EMAIL_APPLY_SESSION_KEY = "cpPendingInlineEmailApply";
-  const PENDING_INLINE_EMAIL_RESET_SESSION_KEY = "cpPendingInlineEmailReset";
   const PENDING_INLINE_NOTE_APPLY_SESSION_KEY = "cpPendingInlineNoteApply";
-  const PENDING_INLINE_NOTE_OPEN_SESSION_KEY = "cpPendingInlineNoteOpen";
   const PENDING_INLINE_TASK_OPEN_SESSION_KEY = "cpPendingInlineTaskOpen";
   const INLINE_QUICK_ACTIONS_STYLE_ID = "cpInlineQuickActionsStyle";
   const INLINE_QUICK_ACTIONS_POSITION_LOCAL_KEY = "popupInlineQuickActionsPosition";
@@ -1589,33 +1587,6 @@
     }
   }
 
-  function savePendingInlineEmailReset(payload) {
-    try {
-      window.sessionStorage?.setItem(PENDING_INLINE_EMAIL_RESET_SESSION_KEY, JSON.stringify(payload || {}));
-    } catch (_error) {
-      // Ignore storage failures and fall back to direct page automation only.
-    }
-  }
-
-  function loadPendingInlineEmailReset() {
-    try {
-      const raw = window.sessionStorage?.getItem(PENDING_INLINE_EMAIL_RESET_SESSION_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch (_error) {
-      return null;
-    }
-  }
-
-  function clearPendingInlineEmailReset() {
-    try {
-      window.sessionStorage?.removeItem(PENDING_INLINE_EMAIL_RESET_SESSION_KEY);
-    } catch (_error) {
-      // Ignore storage failures.
-    }
-  }
-
   function savePendingInlineNoteApply(payload) {
     try {
       window.sessionStorage?.setItem(PENDING_INLINE_NOTE_APPLY_SESSION_KEY, JSON.stringify(payload || {}));
@@ -1638,33 +1609,6 @@
   function clearPendingInlineNoteApply() {
     try {
       window.sessionStorage?.removeItem(PENDING_INLINE_NOTE_APPLY_SESSION_KEY);
-    } catch (_error) {
-      // Ignore storage failures.
-    }
-  }
-
-  function savePendingInlineNoteOpen(payload) {
-    try {
-      window.sessionStorage?.setItem(PENDING_INLINE_NOTE_OPEN_SESSION_KEY, JSON.stringify(payload || {}));
-    } catch (_error) {
-      // Ignore storage failures and fall back to direct page automation only.
-    }
-  }
-
-  function loadPendingInlineNoteOpen() {
-    try {
-      const raw = window.sessionStorage?.getItem(PENDING_INLINE_NOTE_OPEN_SESSION_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch (_error) {
-      return null;
-    }
-  }
-
-  function clearPendingInlineNoteOpen() {
-    try {
-      window.sessionStorage?.removeItem(PENDING_INLINE_NOTE_OPEN_SESSION_KEY);
     } catch (_error) {
       // Ignore storage failures.
     }
@@ -1945,42 +1889,6 @@
     return bestScore >= 10 ? best : null;
   }
 
-  function focusNoteEditor(editor) {
-    if (!(editor instanceof Element)) return false;
-    editor.focus();
-    if (editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement) {
-      try {
-        const length = String(editor.value || "").length;
-        editor.setSelectionRange(length, length);
-      } catch (_error) {
-        // Ignore selection failures.
-      }
-    }
-    return true;
-  }
-
-  async function openNoteComposerOnPage() {
-    let editor = findNoteEditor();
-    if (editor && getNoteComposerRoot(editor)) {
-      focusNoteEditor(editor);
-      return { ok: true };
-    }
-
-    for (let i = 0; i < TIMING.noteComposerOpenAttempts; i += 1) {
-      editor = findNoteEditor();
-      if (editor && getNoteComposerRoot(editor)) {
-        focusNoteEditor(editor);
-        return { ok: true };
-      }
-
-      if (i === 0 || i % 3 === 0) clickActivitiesTab();
-      if (i === 1 || i % 3 === 1) clickNotesActivityTab();
-      clickNoteTrigger();
-      await sleep(TIMING.noteComposerOpenDelayMs);
-    }
-
-    throw new Error("Could not open the HubSpot note composer.");
-  }
 
   async function createNoteOnPage(noteBody, noteHtml = "") {
     const richHtml = toInsertableHtml(noteHtml || noteBody);
@@ -2132,65 +2040,6 @@
     }
 
     return bestScore > 5 ? best : null;
-  }
-
-  function isEmailInteractionRoute() {
-    try {
-      const params = new URLSearchParams(String(location.search || ""));
-      return String(params.get("interaction") || "").toLowerCase() === "email";
-    } catch (_error) {
-      return false;
-    }
-  }
-
-  function findEmailComposerRootForReset() {
-    const dialog = findOpenEmailDialog();
-    if (dialog) return dialog;
-
-    if (!isEmailInteractionRoute()) return null;
-
-    const candidateRoots = Array.from(
-      document.querySelectorAll("form, section, article, [role='region'], [data-test-id], [data-testid], [data-selenium-test]")
-    ).filter((root) => isVisible(root));
-
-    let best = null;
-    let bestScore = -Infinity;
-
-    for (const root of candidateRoots) {
-      const text = elementText(root).toLowerCase();
-      const subjectInput = findSubjectInput(root);
-      const bodyEditor = findBodyEditor(root);
-      const buttons = Array.from(root.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit']"));
-      const sendLikeButton = buttons.find((button) => {
-        if (!(button instanceof Element) || !isVisible(button)) return false;
-        const hint = getElementHint(button);
-        const buttonText = elementText(button).toLowerCase();
-        const combined = `${hint} ${buttonText}`.trim();
-        return combined.includes("send") || combined.includes("email") || combined.includes("log email");
-      });
-
-      let score = 0;
-      if (subjectInput) score += 24;
-      if (bodyEditor) score += 16;
-      if (sendLikeButton) score += 10;
-      if (text.includes("subject")) score += 8;
-      if (text.includes("send")) score += 8;
-      if (text.includes("bcc")) score += 4;
-      if (text.includes("cc")) score += 3;
-      if (text.includes("to")) score += 2;
-      if (text.includes("email")) score += 6;
-      if (text.includes("note")) score -= 24;
-      if (text.includes("task")) score -= 24;
-      if (text.includes("meeting")) score -= 20;
-      if (text.includes("call")) score -= 20;
-
-      if (score > bestScore) {
-        bestScore = score;
-        best = root;
-      }
-    }
-
-    return bestScore >= 28 ? best : null;
   }
 
   function getEmailComposerTriggers() {
@@ -2679,163 +2528,6 @@
     return true;
   }
 
-  function getEmailEditorRoot(editor) {
-    const target = resolveEditorTarget(editor);
-    if (!target) return null;
-    const root = target.closest(".ProseMirror") || target;
-    return root instanceof Element ? root : null;
-  }
-
-  function getCurrentEmailSignatureNode(composerRoot) {
-    const bodyEditors = getBodyEditorCandidates(composerRoot);
-    for (const bodyEditor of bodyEditors) {
-      const root = getEmailEditorRoot(bodyEditor);
-      const signature = root?.querySelector(".hs-signature");
-      if (signature instanceof Element) {
-        return { signature, root };
-      }
-    }
-
-    const fallbackEditor = findBodyEditor(composerRoot);
-    const fallbackRoot = fallbackEditor ? getEmailEditorRoot(fallbackEditor) : null;
-    const fallbackSignature = fallbackRoot?.querySelector(".hs-signature");
-    if (fallbackSignature instanceof Element && fallbackRoot instanceof Element) {
-      return { signature: fallbackSignature, root: fallbackRoot };
-    }
-
-    return null;
-  }
-
-  function syncInlineEmailSignatureCache(composerRoot) {
-    const current = getCurrentEmailSignatureNode(composerRoot);
-    if (!current) {
-      if (!inlineQuickActionsState.emailSignatureState.removedByExtension) {
-        inlineQuickActionsState.emailSignatureState.cachedHtml = "";
-      }
-      return null;
-    }
-
-    inlineQuickActionsState.emailSignatureState.cachedHtml = String(current.signature.outerHTML || "");
-    if (!inlineQuickActionsState.emailSignatureState.removedByExtension) {
-      inlineQuickActionsState.emailSignatureState.removedByExtension = false;
-    }
-    return current;
-  }
-
-  function getInlineEmailSignatureButtonState() {
-    const composerRoot = findEmailComposerRootForReset();
-    if (!composerRoot) {
-      return inlineQuickActionsState.emailSignatureState.removedByExtension === true;
-    }
-
-    const current = syncInlineEmailSignatureCache(composerRoot);
-    if (current) {
-      inlineQuickActionsState.emailSignatureState.removedByExtension = false;
-      return false;
-    }
-
-    return inlineQuickActionsState.emailSignatureState.removedByExtension === true;
-  }
-
-  function restoreCachedEmailSignature(composerRoot) {
-    const cachedHtml = String(inlineQuickActionsState.emailSignatureState.cachedHtml || "").trim();
-    if (!cachedHtml) {
-      throw new Error("No cached signature is available to restore.");
-    }
-
-    const bodyEditors = getBodyEditorCandidates(composerRoot);
-    const editor = bodyEditors[0] || findBodyEditor(composerRoot);
-    const root = editor ? getEmailEditorRoot(editor) : null;
-    if (!root) {
-      throw new Error("Could not find the email body editor.");
-    }
-    if (root.querySelector(".hs-signature")) {
-      inlineQuickActionsState.emailSignatureState.removedByExtension = false;
-      return { ok: true };
-    }
-
-    const container = document.createElement("template");
-    container.innerHTML = cachedHtml;
-    const signatureNode = container.content.firstElementChild;
-    if (!(signatureNode instanceof Element)) {
-      throw new Error("Cached signature is invalid.");
-    }
-
-    root.appendChild(signatureNode);
-    dispatchInputLikeEvents(root);
-    inlineQuickActionsState.emailSignatureState.removedByExtension = false;
-    return { ok: true };
-  }
-
-  function removeCurrentEmailSignature(composerRoot) {
-    const current = syncInlineEmailSignatureCache(composerRoot);
-    if (!current) {
-      throw new Error("No signature was found in the open email composer.");
-    }
-
-    current.signature.remove();
-    dispatchInputLikeEvents(current.root);
-    inlineQuickActionsState.emailSignatureState.removedByExtension = true;
-    return { ok: true };
-  }
-
-  async function toggleOpenEmailSignatureOnPage() {
-    const composerRoot = findEmailComposerRootForReset();
-    if (!composerRoot) {
-      throw new Error("Open a HubSpot Email composer first.");
-    }
-
-    if (inlineQuickActionsState.emailSignatureState.removedByExtension) {
-      const restored = restoreCachedEmailSignature(composerRoot);
-      syncInlineEmailSignatureCache(composerRoot);
-      return restored;
-    }
-
-    const removed = removeCurrentEmailSignature(composerRoot);
-    return removed;
-  }
-
-  function getEmailEditorResidualContent(editor) {
-    const target = resolveEditorTarget(editor);
-    if (!target) return "";
-
-    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
-      return cleanText(String(target.value || ""));
-    }
-
-    const root = target.closest(".ProseMirror") || target;
-    if (!(root instanceof Element)) return "";
-
-    const clone = root.cloneNode(true);
-    if (!(clone instanceof Element)) return "";
-    clone.querySelectorAll(".hs-signature").forEach((node) => node.remove());
-    clone.querySelectorAll("br").forEach((node) => {
-      if (!node.parentElement || node.parentElement.childNodes.length > 1) return;
-      node.remove();
-    });
-    return cleanText(String(clone.textContent || ""));
-  }
-
-  function emailComposerNeedsReset(composerRoot) {
-    const subjectInput = findSubjectInput(composerRoot);
-    const subjectValue = subjectInput
-      ? cleanText(
-          subjectInput instanceof HTMLInputElement || subjectInput instanceof HTMLTextAreaElement
-            ? String(subjectInput.value || "")
-            : String(subjectInput.textContent || "")
-        )
-      : "";
-    if (subjectValue) return true;
-
-    const bodyEditors = getBodyEditorCandidates(composerRoot);
-    for (const bodyEditor of bodyEditors) {
-      if (getEmailEditorResidualContent(bodyEditor)) return true;
-    }
-
-    const fallbackEditor = findBodyEditor(composerRoot);
-    return !!fallbackEditor && !!getEmailEditorResidualContent(fallbackEditor);
-  }
-
   async function applyEmailTemplateOnPage(subject, body, bodyHtml = "") {
     const dialog = findOpenEmailDialog();
     if (!dialog) {
@@ -2887,49 +2579,6 @@
     }
   }
 
-  async function clearOpenEmailComposerOnPage() {
-    const composerRoot = findEmailComposerRootForReset();
-    if (!composerRoot) {
-      throw new Error("Open a HubSpot Email composer first.");
-    }
-
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const subjectInput = await waitForSubjectInput(composerRoot, 3, 120);
-      if (subjectInput) {
-        setInputValue(subjectInput, "");
-      }
-
-      const bodyEditors = getBodyEditorCandidates(composerRoot);
-      let clearedBody = false;
-      for (const bodyEditor of bodyEditors) {
-        if (clearEditorContentPreservingEmbeds(bodyEditor)) {
-          clearedBody = true;
-        }
-      }
-
-      if (!clearedBody) {
-        const fallbackEditor = findBodyEditor(composerRoot);
-        if (fallbackEditor) {
-          clearedBody = clearEditorContentPreservingEmbeds(fallbackEditor) || clearedBody;
-        }
-      }
-
-      if (!emailComposerNeedsReset(composerRoot)) {
-        if (subjectInput instanceof Element) {
-          subjectInput.focus();
-        } else {
-          const editor = findBodyEditor(composerRoot);
-          editor?.focus?.();
-        }
-        return { ok: true };
-      }
-
-      await sleep(160);
-    }
-
-    throw new Error("Could not reset the open HubSpot Email composer.");
-  }
-
   function clickEmailComposerTrigger() {
     const triggers = getEmailComposerTriggers();
     if (!triggers.length) return false;
@@ -2960,10 +2609,6 @@
       note: [],
       whatsapp: []
     },
-    emailSignatureState: {
-      cachedHtml: "",
-      removedByExtension: false
-    },
     cloudAuthList: [],
     templateUsageByContact: {},
     noteTemplateUsageByContact: {},
@@ -2972,9 +2617,7 @@
     position: null,
     busy: false,
     pendingEmailApplyRunning: false,
-    pendingEmailResetRunning: false,
     pendingNoteApplyRunning: false,
-    pendingNoteOpenRunning: false,
     pendingTaskOpenRunning: false,
     searchQuery: "",
     lastUrl: "",
@@ -3676,20 +3319,38 @@
         overflow: hidden;
       }
 
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        padding: 9px 10px 5px;
+        cursor: grab;
+        user-select: none;
+        color: #402a68;
+        background: #f3ebff;
+        box-shadow:
+          0 1px 0 rgba(100, 67, 154, 0.08);
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-brand-name {
+        line-height: 1;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-head {
+        cursor: grabbing;
+      }
+
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
-        padding: 8px 10px 8px;
+        padding: 2px 10px 9px;
         background: #f3ebff;
-        cursor: grab;
-        user-select: none;
-        box-shadow: 0 1px 0 rgba(100, 67, 154, 0.08);
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-actions-row {
-        cursor: grabbing;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-divider {
@@ -3763,15 +3424,11 @@
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search {
-        display: flex;
-        align-items: center;
-        gap: 6px;
         padding: 8px 8px 4px;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input {
         width: 100%;
-        min-width: 0;
         border: 1px solid rgba(123, 99, 161, 0.26);
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.92);
@@ -3786,40 +3443,6 @@
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input:focus {
         border-color: rgba(123, 99, 161, 0.48);
         box-shadow: 0 0 0 3px rgba(137, 96, 196, 0.12);
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 30px;
-        height: 30px;
-        flex-shrink: 0;
-        border: 1px solid rgba(123, 99, 161, 0.22);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.9);
-        color: #5a437d;
-        cursor: pointer;
-        padding: 0;
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn svg {
-        width: 15px;
-        height: 15px;
-        stroke: currentColor;
-        fill: none;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn:hover {
-        background: rgba(137, 96, 196, 0.1);
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn:disabled {
-        opacity: 0.6;
-        cursor: wait;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-template-btn {
@@ -3906,6 +3529,11 @@
         box-shadow: 0 8px 24px rgba(18, 8, 32, 0.42) !important;
       }
 
+      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
+        color: #f7f1ff !important;
+        background: #473668 !important;
+      }
+
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row {
         background: #473668 !important;
       }
@@ -3940,16 +3568,6 @@
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-search-input:focus {
         border-color: rgba(198, 173, 232, 0.46) !important;
         box-shadow: 0 0 0 3px rgba(179, 145, 226, 0.14) !important;
-      }
-
-      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn {
-        background: rgba(43, 31, 63, 0.92) !important;
-        border-color: rgba(198, 173, 232, 0.22) !important;
-        color: #efe6fb !important;
-      }
-
-      html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-launch-btn:hover {
-        background: rgba(179, 145, 226, 0.18) !important;
       }
 
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-panel::-webkit-scrollbar-thumb {
@@ -4018,10 +3636,6 @@
     return "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 4c4.7 0 8.5 3.4 8.5 7.5S16.7 19 12 19c-1 0-2-.2-2.9-.5L4 20l1.4-3.8C4.5 14.9 4 13.2 4 11.5 4 7.4 7.8 4 12 4z'></path><circle cx='9' cy='11.5' r='0.9'></circle><circle cx='12' cy='11.5' r='0.9'></circle><circle cx='15' cy='11.5' r='0.9'></circle></svg>";
   }
 
-  function inlineLaunchIcon() {
-    return "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M14 5h5v5'></path><path d='M10 14 19 5'></path><path d='M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5'></path></svg>";
-  }
-
   function setInlineQuickActionsStatus(message, tone = "") {
     if (!inlineQuickActionsState.statusEl) return;
     inlineQuickActionsState.statusEl.textContent = String(message || "");
@@ -4045,39 +3659,6 @@
       button.classList.toggle("active", kind === inlineQuickActionsState.activeKind);
       button.disabled = inlineQuickActionsState.busy;
     });
-    inlineQuickActionsState.rootEl.querySelectorAll(".cp-inline-launch-btn").forEach((button) => {
-      button.disabled = inlineQuickActionsState.busy;
-    });
-  }
-
-  function getInlineSearchLaunchMeta(kind) {
-    const key = String(kind || "").toLowerCase();
-    if (key === "email") {
-      return { title: "Open email composer", ariaLabel: "Open email composer" };
-    }
-    if (key === "whatsapp") {
-      return { title: "Open WhatsApp", ariaLabel: "Open WhatsApp" };
-    }
-    if (key === "note") {
-      return { title: "Open note composer", ariaLabel: "Open note composer" };
-    }
-    return null;
-  }
-
-  function renderInlineSearchRow(kind) {
-    const launchMeta = getInlineSearchLaunchMeta(kind);
-    return (
-      `<div class='cp-inline-search'>` +
-      `<input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
-        inlineQuickActionsState.searchQuery || ""
-      )}'>` +
-      (launchMeta
-        ? `<button type='button' class='cp-inline-launch-btn' data-inline-open-kind='${escapeHtml(kind)}' title='${escapeHtml(
-            launchMeta.title
-          )}' aria-label='${escapeHtml(launchMeta.ariaLabel)}'>${inlineLaunchIcon()}</button>`
-        : "") +
-      `</div>`
-    );
   }
 
   function renderInlineQuickActionsPanel(kind = "") {
@@ -4104,12 +3685,16 @@
     }
     if (!matchingTemplates.length) {
       inlineQuickActionsState.panelEl.innerHTML =
-        renderInlineSearchRow(inlineQuickActionsState.activeKind) + "<div class='cp-inline-empty'>No templates match that title.</div>";
+        `<div class='cp-inline-search'><input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
+          inlineQuickActionsState.searchQuery || ""
+        )}'></div>` + "<div class='cp-inline-empty'>No templates match that title.</div>";
       return;
     }
 
     inlineQuickActionsState.panelEl.innerHTML =
-      renderInlineSearchRow(inlineQuickActionsState.activeKind) +
+      `<div class='cp-inline-search'><input type='text' class='cp-inline-search-input' placeholder='Search titles...' autocomplete='off' value='${escapeHtml(
+        inlineQuickActionsState.searchQuery || ""
+      )}'></div>` +
       matchingTemplates
       .map((template) => {
         const isUsed = hasInlineTemplateBeenUsed(inlineQuickActionsState.activeKind, template.id);
@@ -4208,39 +3793,6 @@
     }
   }
 
-  async function runPendingInlineEmailResetIfNeeded() {
-    if (inlineQuickActionsState.pendingEmailResetRunning) return;
-
-    const pending = loadPendingInlineEmailReset();
-    if (!pending) return;
-
-    const currentRecordId = getRecordIdFromPath();
-    if (!currentRecordId || String(pending.recordId || "") !== String(currentRecordId)) {
-      clearPendingInlineEmailReset();
-      return;
-    }
-
-    if (Date.now() - Number(pending.createdAt || 0) > 2 * 60 * 1000) {
-      clearPendingInlineEmailReset();
-      return;
-    }
-
-    inlineQuickActionsState.pendingEmailResetRunning = true;
-    try {
-      for (let attempt = 0; attempt < TIMING.emailComposerOpenAttempts + 4; attempt += 1) {
-        if (findOpenEmailDialog()) break;
-        await sleep(TIMING.emailComposerOpenDelayMs);
-      }
-
-      await clearOpenEmailComposerOnPage();
-      clearPendingInlineEmailReset();
-    } catch (_error) {
-      clearPendingInlineEmailReset();
-    } finally {
-      inlineQuickActionsState.pendingEmailResetRunning = false;
-    }
-  }
-
   async function applyInlineNoteTemplate(template) {
     const context = getInlineContactContextOrThrow();
     const tokens = buildInlineTemplateTokens(context);
@@ -4300,55 +3852,6 @@
       clearPendingInlineNoteApply();
     } finally {
       inlineQuickActionsState.pendingNoteApplyRunning = false;
-    }
-  }
-
-  async function openInlineNoteComposer() {
-    const existingEditor = findNoteEditor();
-    if (existingEditor && getNoteComposerRoot(existingEditor)) {
-      focusNoteEditor(existingEditor);
-      return;
-    }
-
-    const interactionUrl = buildCurrentContactInteractionUrl("note");
-    if (!interactionUrl) {
-      await openNoteComposerOnPage();
-      return;
-    }
-
-    const context = getInlineContactContextOrThrow();
-    savePendingInlineNoteOpen({
-      recordId: context.recordId,
-      createdAt: Date.now()
-    });
-    location.assign(interactionUrl);
-  }
-
-  async function runPendingInlineNoteOpenIfNeeded() {
-    if (inlineQuickActionsState.pendingNoteOpenRunning) return;
-
-    const pending = loadPendingInlineNoteOpen();
-    if (!pending) return;
-
-    const currentRecordId = getRecordIdFromPath();
-    if (!currentRecordId || String(pending.recordId || "") !== String(currentRecordId)) {
-      clearPendingInlineNoteOpen();
-      return;
-    }
-
-    if (Date.now() - Number(pending.createdAt || 0) > 2 * 60 * 1000) {
-      clearPendingInlineNoteOpen();
-      return;
-    }
-
-    inlineQuickActionsState.pendingNoteOpenRunning = true;
-    try {
-      await openNoteComposerOnPage();
-      clearPendingInlineNoteOpen();
-    } catch (_error) {
-      clearPendingInlineNoteOpen();
-    } finally {
-      inlineQuickActionsState.pendingNoteOpenRunning = false;
     }
   }
 
@@ -4623,48 +4126,6 @@
     location.assign(interactionUrl);
   }
 
-  async function openInlineQuickActionTarget(kind) {
-    const targetKind = String(kind || "").toLowerCase();
-    if (!targetKind) return;
-
-    if (targetKind === "email") {
-      if (findOpenEmailDialog()) {
-        await clearOpenEmailComposerOnPage();
-        return;
-      }
-      const context = getInlineContactContextOrThrow();
-      const interactionUrl = buildCurrentContactInteractionUrl("email");
-      if (!interactionUrl) {
-        throw new Error("Could not open the HubSpot Email composer.");
-      }
-      savePendingInlineEmailReset({
-        recordId: context.recordId,
-        createdAt: Date.now()
-      });
-      location.assign(interactionUrl);
-      return;
-    }
-
-    if (targetKind === "whatsapp") {
-      const context = getInlineContactContextOrThrow();
-      const phoneDigits =
-        String(context?.contact?.phoneDigits || "").replace(/\D/g, "") ||
-        String(normalizePhone(context?.contact?.values?.phone || "", inlineQuickActionsState.countryPrefix) || "").replace(/\D/g, "");
-      if (!phoneDigits) throw new Error("No phone number found on this contact.");
-      await openOrReuseWhatsappTab(`https://web.whatsapp.com/send/?phone=${phoneDigits}&type=phone_number`);
-      return;
-    }
-
-    if (targetKind === "note") {
-      await openInlineNoteComposer();
-      return;
-    }
-
-    if (targetKind === "task") {
-      await openInlineTaskComposer();
-    }
-  }
-
   async function runPendingInlineTaskOpenIfNeeded() {
     if (inlineQuickActionsState.pendingTaskOpenRunning) return;
 
@@ -4771,58 +4232,9 @@
     renderInlineQuickActionsPanel(selectedKind);
   }
 
-  async function handleInlineQuickOpen(kind) {
-    if (inlineQuickActionsState.busy) return;
-    const selectedKind = String(kind || "").toLowerCase();
-    if (!selectedKind) return;
-
-    setInlineQuickActionsBusy(true);
-    setInlineQuickActionsStatus("");
-    try {
-      await openInlineQuickActionTarget(selectedKind);
-      renderInlineQuickActionsPanel("");
-      setInlineQuickActionsStatus("");
-    } catch (error) {
-      const reason = cleanText(String(error?.message || error || "Action failed."));
-      setInlineQuickActionsStatus(reason || "Action failed.", "error");
-    } finally {
-      setInlineQuickActionsBusy(false);
-    }
-  }
-
-  async function handleInlineSignatureToggle() {
-    if (inlineQuickActionsState.busy) return;
-
-    setInlineQuickActionsBusy(true);
-    setInlineQuickActionsStatus("");
-    try {
-      await toggleOpenEmailSignatureOnPage();
-      renderInlineQuickActionsPanel("email");
-      setInlineQuickActionsStatus("");
-    } catch (error) {
-      const reason = cleanText(String(error?.message || error || "Signature action failed."));
-      setInlineQuickActionsStatus(reason || "Signature action failed.", "error");
-    } finally {
-      setInlineQuickActionsBusy(false);
-    }
-  }
-
   function handleInlineRootClick(event) {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
-
-    const sigButton = target.closest("[data-inline-sig-toggle]");
-    if (sigButton) {
-      void handleInlineSignatureToggle();
-      return;
-    }
-
-    const quickOpenButton = target.closest("[data-inline-open-kind]");
-    if (quickOpenButton) {
-      const kind = String(quickOpenButton.getAttribute("data-inline-open-kind") || "");
-      void handleInlineQuickOpen(kind);
-      return;
-    }
 
     const actionButton = target.closest(".cp-inline-action-btn");
     if (actionButton) {
@@ -4905,9 +4317,8 @@
     if (event.button !== 0) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
-    const handle = target.closest(".cp-inline-actions-row");
+    const handle = target.closest(".cp-inline-head");
     if (!handle || !inlineQuickActionsState.rootEl) return;
-    if (target.closest(".cp-inline-action-btn")) return;
 
     const rect = inlineQuickActionsState.rootEl.getBoundingClientRect();
     inlineQuickActionsState.dragging.active = true;
@@ -4941,6 +4352,7 @@
     rootEl.dataset.dragging = "0";
     rootEl.innerHTML = `
       <div class='cp-inline-card'>
+        <div class='cp-inline-head'><span class='cp-inline-brand-name'>Contact Point</span></div>
         <div class='cp-inline-actions-row'>
           <button type='button' class='cp-inline-action-btn' data-kind='whatsapp' aria-label='WhatsApp templates' title='WhatsApp templates'>${inlineActionIcon("whatsapp")}</button>
           <span class='cp-inline-divider'>|</span>
@@ -4995,9 +4407,7 @@
     setInlineQuickActionsStatus("");
     void refreshInlineQuickActionsData();
     void runPendingInlineEmailApplyIfNeeded();
-    void runPendingInlineEmailResetIfNeeded();
     void runPendingInlineNoteApplyIfNeeded();
-    void runPendingInlineNoteOpenIfNeeded();
     void runPendingInlineTaskOpenIfNeeded();
   }
 
@@ -5005,40 +4415,51 @@
     applyInlineQuickActionsPosition();
   }
 
+  function findSignatureInEmailComposer() {
+    const dialog = findOpenEmailDialog();
+    if (!dialog) return null;
+    const bodyEditors = getBodyEditorCandidates(dialog);
+    for (const bodyEditor of bodyEditors) {
+      const target = resolveEditorTarget(bodyEditor);
+      if (!target) continue;
+      const root = target.closest(".ProseMirror") || target;
+      const sig = root?.querySelector(".hs-signature");
+      if (sig instanceof Element) return { sig, root };
+    }
+    return null;
+  }
+
+  function removeEmailSignatureFromComposer() {
+    const found = findSignatureInEmailComposer();
+    if (!found) throw new Error("No signature found in the open email composer.");
+    found.sig.remove();
+    dispatchInputLikeEvents(found.root);
+  }
+
   let sigRemoveBtnScrollHandler = null;
 
   function updateSigRemoveBtnPosition() {
     const btn = document.querySelector(".cp-sig-remove-btn");
     if (!btn) return;
-    const composerRoot = findEmailComposerRootForReset();
-    if (!composerRoot) {
+    const found = findSignatureInEmailComposer();
+    if (!found) {
       btn.remove();
       return;
     }
-    const sigNode = getCurrentEmailSignatureNode(composerRoot);
-    if (!sigNode?.signature) {
-      btn.remove();
-      return;
-    }
-    const rect = sigNode.signature.getBoundingClientRect();
+    const rect = found.sig.getBoundingClientRect();
     const btnSize = 22;
     btn.style.top = `${Math.max(4, rect.top + 4)}px`;
     btn.style.left = `${Math.max(4, rect.right - btnSize - 4)}px`;
   }
 
   function injectSigRemoveButtonIfNeeded() {
-    const composerRoot = findEmailComposerRootForReset();
-    if (!composerRoot) {
+    const found = findSignatureInEmailComposer();
+    if (!found) {
       document.querySelector(".cp-sig-remove-btn")?.remove();
       if (sigRemoveBtnScrollHandler) {
         document.removeEventListener("scroll", sigRemoveBtnScrollHandler, true);
         sigRemoveBtnScrollHandler = null;
       }
-      return;
-    }
-    const sigNode = getCurrentEmailSignatureNode(composerRoot);
-    if (!sigNode?.signature) {
-      document.querySelector(".cp-sig-remove-btn")?.remove();
       return;
     }
     if (document.querySelector(".cp-sig-remove-btn")) {
@@ -5054,7 +4475,11 @@
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      void handleInlineSignatureToggle();
+      try {
+        removeEmailSignatureFromComposer();
+      } catch (_err) {
+        // Signature already gone; the interval will clean up the button.
+      }
     });
     document.body.appendChild(btn);
     if (!sigRemoveBtnScrollHandler) {
