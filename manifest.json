@@ -5,10 +5,12 @@
   "description": "HubSpot contact workflow extension for WhatsApp, notes, and email templates.",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://*.hubspot.com/*",
+    "https://web.whatsapp.com/*",
     "https://us.i.posthog.com/*",
     "https://contactpoint.vercel.app/*",
     "http://localhost/*",
