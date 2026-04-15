@@ -68,20 +68,7 @@ async function openOrReuseWhatsappTab(urlInput, sender = null) {
   const existingTab = [...existingTabs].sort((a, b) => Number(b.lastAccessed || 0) - Number(a.lastAccessed || 0))[0] || null;
 
   if (existingTab && typeof existingTab.id === "number") {
-    // Soft-navigate inside the existing WhatsApp Web tab so its SPA router
-    // handles the route change instead of the browser doing a full reload.
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: existingTab.id },
-        func: (targetUrl) => { window.location.href = targetUrl; },
-        args: [url]
-      });
-    } catch (_err) {
-      // Scripting injection failed (e.g. tab not yet ready) — fall back to
-      // a regular browser navigation.
-      await chrome.tabs.update(existingTab.id, { url });
-    }
-    await chrome.tabs.update(existingTab.id, { active: true });
+    await chrome.tabs.update(existingTab.id, { url, active: true });
     if (typeof existingTab.windowId === "number") {
       await chrome.windows.update(existingTab.windowId, { focused: true });
     }
