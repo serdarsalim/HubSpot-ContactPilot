@@ -3320,24 +3320,11 @@
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 7px;
-        font-size: 13px;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        padding: 9px 10px 5px;
+        height: 6px;
         cursor: grab;
         user-select: none;
-        color: #402a68;
-        background: #f3ebff;
-        box-shadow:
-          0 1px 0 rgba(100, 67, 154, 0.08);
-      }
-
-      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-brand-name {
-        line-height: 1;
+        background: #ede7f6;
+        border-radius: 10px 10px 0 0;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-head {
@@ -3530,8 +3517,7 @@
       }
 
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-head {
-        color: #f7f1ff !important;
-        background: #473668 !important;
+        background: #3a2a55 !important;
       }
 
       html[data-darkreader-scheme="dark"] #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row {
@@ -4352,7 +4338,7 @@
     rootEl.dataset.dragging = "0";
     rootEl.innerHTML = `
       <div class='cp-inline-card'>
-        <div class='cp-inline-head'><span class='cp-inline-brand-name'>Contact Point</span></div>
+        <div class='cp-inline-head'></div>
         <div class='cp-inline-actions-row'>
           <button type='button' class='cp-inline-action-btn' data-kind='whatsapp' aria-label='WhatsApp templates' title='WhatsApp templates'>${inlineActionIcon("whatsapp")}</button>
           <span class='cp-inline-divider'>|</span>
