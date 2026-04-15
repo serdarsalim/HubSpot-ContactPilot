@@ -4173,7 +4173,7 @@
         markInlineTemplateUsed("note", template.id);
         void trackInlineCloudTemplateUse(template);
         setInlineQuickActionsStatus("");
-        renderInlineQuickActionsPanel("");
+        renderInlineQuickActionsPanel("note");
       } else if (kind === "whatsapp") {
         await applyInlineWhatsappTemplate(template);
         markInlineTemplateUsed("whatsapp", template.id);
