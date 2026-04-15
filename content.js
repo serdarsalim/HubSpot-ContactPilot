@@ -3338,6 +3338,15 @@
         gap: 6px;
         padding: 2px 10px 9px;
         background: #f3ebff;
+        cursor: grab;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID}[data-dragging="1"] .cp-inline-actions-row {
+        cursor: grabbing;
+      }
+
+      #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-actions-row button {
+        cursor: pointer;
       }
 
       #${INLINE_QUICK_ACTIONS_ROOT_ID} .cp-inline-divider {
@@ -4303,7 +4312,8 @@
     if (event.button !== 0) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
-    const handle = target.closest(".cp-inline-head");
+    const handle = target.closest(".cp-inline-head") ||
+      (target.closest(".cp-inline-actions-row") && !target.closest("button, [role='button']") ? target.closest(".cp-inline-actions-row") : null);
     if (!handle || !inlineQuickActionsState.rootEl) return;
 
     const rect = inlineQuickActionsState.rootEl.getBoundingClientRect();
