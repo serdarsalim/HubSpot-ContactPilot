@@ -369,10 +369,11 @@
       const showSave = isCloudAuthTokenDirty(auth.organizationId);
       const isPaused = auth.templatesPaused === true;
       const syncedAt = formatCloudSyncLabel(state.cloud.meta);
+      const tokenPrefix = String(auth.tokenPrefix || "").trim();
       return `
         <div class="cloud-auth-card" data-cloud-auth-org-id="${App.escapeHtml(auth.organizationId)}">
           <div class="cloud-auth-card-head">
-            <strong>${App.escapeHtml(orgName)}</strong>
+            <strong>${App.escapeHtml(orgName)}${tokenPrefix ? ` <span class="cloud-token-prefix">${App.escapeHtml(tokenPrefix)}</span>` : ""}</strong>
             <div class="cloud-token-row">
               <input
                 class="cloud-token-input"
